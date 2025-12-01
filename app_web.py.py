@@ -1,40 +1,78 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
+import time
 from fpdf import FPDF
 import tempfile
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import base64
 
-# --- 1. CONFIGURAÇÃO VISUAL E CSS (DESIGN) ---
+# --- 1. CONFIGURAÇÃO VISUAL E CSS (DESIGN HOSPITALAR) ---
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
 
-# CSS Customizado para dar um visual "App Nativo"
-st.markdown("""
+# Função para carregar imagem local
+def get_img_as_base64(file):
+    try:
+        with open(file, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except:
+        return ""
+
+img_loading = get_img_as_base64("loading.png")
+
+# CSS Profissional (Estilo "Medical Dashboard")
+st.markdown(f"""
 <style>
-    /* Fundo dos cartões de métricas */
-    div[data-testid="metric-container"] {
-        background-color: #f0f2f6;
-        border: 1px solid #e0e0e0;
+    /* Fundo geral mais limpo */
+    .stApp {{
+        background-color: #f8f9fa;
+    }}
+    
+    /* Cartões de Métricas (KPIs) */
+    div[data-testid="metric-container"] {{
+        background-color: #ffffff;
+        border: 1px solid #e6e6e6;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        transition: transform 0.2s;
+    }}
+    div[data-testid="metric-container"]:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+    }}
+    
+    /* Botões Modernos */
+    .stButton>button {{
+        border-radius: 8px;
+        font-weight: 600;
+        height: 3em;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }}
+    
+    /* Títulos Elegantes */
+    h1, h2, h3 {{
+        font-family: 'Segoe UI', sans-serif;
+        color: #2c3e50;
+    }}
+    
+    /* Mensagens de Alerta Personalizadas */
+    .alert-box {{
         padding: 15px;
-        border-radius: 10px;
-        color: #31333F;
-    }
-    /* Botões arredondados e modernos */
-    .stButton>button {
-        border-radius: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
         font-weight: bold;
-        border: none;
-        transition: 0.3s;
-    }
-    /* Destaque para o botão de salvar */
-    div[data-testid="stButton"] > button:hover {
-        transform: scale(1.02);
-    }
+    }}
+    .alert-red {{ background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }}
+    .alert-green {{ background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }}
+
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. CONEXÃO COM GOOGLE SHEETS ---
+# --- 2. CONEXÃO GOOGLE SHEETS ---
 def conectar_gsheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_dict = st.secrets["gcp_service_account"]
@@ -45,67 +83,59 @@ def conectar_gsheets():
 # --- 3. LÓGICA DE NEGÓCIO ---
 
 def sincronizar_prazos_completo(df_novo):
-    """
-    Apaga a planilha de Prazos antiga e reescreve com a tabela editada na tela.
-    Isso permite editar e excluir itens facilmente.
-    """
     try:
         sh = conectar_gsheets()
         ws = sh.worksheet("Prazos")
-        ws.clear() # Limpa tudo
-        # Prepara os dados: Adiciona cabeçalho e converte para lista
-        lista_dados = [df_novo.columns.values.tolist()] + df_novo.values.tolist()
+        ws.clear()
+        
+        # Converte datas para string antes de salvar para evitar erro de JSON
+        df_salvar = df_novo.copy()
+        df_salvar['Vencimento'] = df_salvar['Vencimento'].astype(str)
+        
+        lista_dados = [df_salvar.columns.values.tolist()] + df_salvar.values.tolist()
         ws.update(lista_dados)
-        st.toast("✅ Nuvem sincronizada com sucesso!", icon="☁️")
+        st.toast("✅ Nuvem sincronizada!", icon="☁️")
         return True
     except Exception as e:
-        st.error(f"Erro ao sincronizar: {e}")
+        st.error(f"Erro sincronização: {e}")
         return False
 
 def salvar_vistoria_db(lista_itens):
     try:
         sh = conectar_gsheets()
-        try:
-            ws = sh.worksheet("Vistorias")
-        except:
-            ws = sh.add_worksheet(title="Vistorias", rows=1000, cols=10)
-            ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data"])
-
+        try: ws = sh.worksheet("Vistorias")
+        except: ws = sh.add_worksheet(title="Vistorias", rows=1000, cols=10)
+        
         hoje = date.today().strftime("%d/%m/%Y")
         for item in lista_itens:
-            ws.append_row([
-                item['Setor'], item['Item'], item['Situação'], 
-                item['Gravidade'], item['Obs'], hoje
-            ])
-    except Exception as e:
-        st.error(f"Erro ao salvar vistoria: {e}")
+            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje])
+    except Exception as e: st.error(f"Erro salvar vistoria: {e}")
 
 def carregar_dados_prazos():
     try:
         sh = conectar_gsheets()
         ws = sh.worksheet("Prazos")
         dados = ws.get_all_records()
-        return pd.DataFrame(dados)
+        df = pd.DataFrame(dados)
+        
+        # Converte a coluna de texto para DATA real do Python
+        # Tenta formato DD/MM/AAAA e depois YYYY-MM-DD
+        df['Vencimento'] = pd.to_datetime(df['Vencimento'], dayfirst=True, errors='coerce').dt.date
+        return df
     except:
         return pd.DataFrame(columns=["Documento", "Vencimento", "Status"])
 
-def calcular_status_e_cor(data_vencimento_str):
-    try:
-        if isinstance(data_vencimento_str, date):
-            data_venc = data_vencimento_str
-        else:
-            data_venc = datetime.strptime(data_vencimento_str, "%d/%m/%Y").date()
-            
-        hoje = date.today()
-        dias = (data_venc - hoje).days
+def calcular_status_e_cor(data_venc):
+    if pd.isnull(data_venc): return 0, "⚪ ERRO DATA"
+    
+    hoje = date.today()
+    dias = (data_venc - hoje).days
 
-        if dias <= 3: return dias, "🔴 CRÍTICO"
-        elif dias <= 15: return dias, "🟠 ALTA"
-        else: return dias, "🟢 NORMAL"
-    except:
-        return 0, "⚪ ERRO"
+    if dias <= 3: return dias, "🔴 CRÍTICO"
+    elif dias <= 15: return dias, "🟠 ALTA"
+    else: return dias, "🟢 NORMAL"
 
-# --- PDF GENERATOR (Mantido e Compactado) ---
+# --- PDF GENERATOR ---
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 12)
@@ -117,165 +147,195 @@ def limpar_txt(t):
 def gerar_pdf(vistorias):
     pdf = PDF()
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
     for i, item in enumerate(vistorias):
         pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 10, f"#{i+1}: {limpar_txt(item['Item'])} ({limpar_txt(item['Setor'])})", 0, 1)
-        pdf.set_font("Arial", size=11)
-        pdf.cell(0, 8, f"Status: {limpar_txt(item['Situação'])} | Gravidade: {limpar_txt(item['Gravidade'])}", 0, 1)
-        pdf.multi_cell(0, 8, f"Obs: {limpar_txt(item['Obs'])}")
+        pdf.cell(0, 10, f"#{i+1}: {limpar_txt(item['Item'])}", 0, 1)
+        pdf.set_font("Arial", size=10)
+        pdf.multi_cell(0, 6, f"Setor: {limpar_txt(item['Setor'])}\nStatus: {limpar_txt(item['Situação'])} | Gravidade: {limpar_txt(item['Gravidade'])}\nObs: {limpar_txt(item['Obs'])}")
         if item['Foto_Binaria']:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
                 t.write(item['Foto_Binaria'].getbuffer())
-                pdf.image(t.name, w=70)
+                pdf.image(t.name, w=60)
         pdf.ln(5)
     return bytes(pdf.output(dest='S'))
 
-# --- 4. INTERFACE PRINCIPAL (UI) ---
+# --- 4. INTERFACE ---
 
-# Sidebar mais limpa
+# Sidebar com "Loading" estático (Identidade Visual)
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=80)
-    st.title("LegalizaHealth")
-    st.markdown("Sistema de Gestão Hospitalar")
+    # Se a imagem carregou, mostra ela como logo
+    if img_loading:
+        st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{img_loading}" width="150" style="border-radius:10px;"></div>', unsafe_allow_html=True)
+    else:
+        st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=80)
+    
+    st.markdown("### LegalizaHealth")
+    st.caption("Gestão de Conformidade Hospitalar")
     st.markdown("---")
-    menu = st.radio("Navegação", ["📊 Dashboard", "📅 Gestão de Prazos", "📸 Vistoria", "📂 Relatórios"])
-    st.info("Versão Cloud 2.0")
+    
+    # Navegação
+    menu = st.radio("Menu", ["📊 Dashboard & Alertas", "📅 Gestão de Prazos", "📸 Nova Vistoria", "📂 Relatórios"])
+    
+    st.markdown("---")
+    st.info("💡 **Dica:** Para editar datas, vá em 'Gestão de Prazos' e clique na célula da tabela.")
 
-# Inicialização de Estado
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
 
-# --- TELA 1: DASHBOARD (NOVO!) ---
-if menu == "📊 Dashboard":
+# --- DASHBOARD ---
+if menu == "📊 Dashboard & Alertas":
     st.title("Painel de Controle")
-    st.markdown("Visão geral da conformidade do hospital.")
     
-    # Carrega dados para mostrar números reais
+    # Simula um loading rápido na troca de tela (Opcional, dá sensação de sistema)
+    with st.spinner('Atualizando indicadores...'):
+        time.sleep(0.3)
+    
     df = carregar_dados_prazos()
     
-    # Calcula métricas
-    total_docs = len(df)
+    # Recalcula status
+    criticos_lista = []
+    atencao_lista = []
     
-    # Recalcula status em tempo real para o dashboard
-    criticos = 0
-    atencao = 0
-    for data_str in df['Vencimento']:
-        d, s = calcular_status_e_cor(data_str)
-        if "CRÍTICO" in s: criticos += 1
-        if "ALTA" in s: atencao += 1
+    for index, row in df.iterrows():
+        d, s = calcular_status_e_cor(row['Vencimento'])
+        if "CRÍTICO" in s: criticos_lista.append(row)
+        if "ALTA" in s: atencao_lista.append(row)
 
-    # Colunas de métricas bonitas
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Documentos Monitorados", total_docs, border=True)
-    col2.metric("Prioridade Extrema", criticos, delta="-Urgentíssimo" if criticos > 0 else "Ok", delta_color="inverse", border=True)
-    col3.metric("Atenção Necessária", atencao, delta_color="off", border=True)
-    col4.metric("Vistorias na Sessão", len(st.session_state['vistorias']), border=True)
+    n_criticos = len(criticos_lista)
+    n_atencao = len(atencao_lista)
+
+    # Métricas
+    col1, col2, col3 = st.columns(3)
+    
+    # Lógica de cor CORRIGIDA: Se tiver críticos, fica VERMELHO ("inverse")
+    col1.metric("Prazos Críticos (< 3 dias)", n_criticos, 
+                delta=f"{n_criticos} Urgentíssimos" if n_criticos > 0 else "Tudo em ordem", 
+                delta_color="inverse") 
+                
+    col2.metric("Atenção (< 15 dias)", n_atencao, delta_color="off")
+    col3.metric("Total Documentos", len(df))
 
     st.markdown("---")
-    st.subheader("⚠️ Itens de Maior Risco")
-    if criticos > 0:
-        st.error(f"Existem {criticos} documentos vencendo em menos de 3 dias!")
+
+    # ALERTA DE RISCO DETALHADO
+    if n_criticos > 0:
+        st.markdown(f"""<div class="alert-box alert-red">⚠️ AÇÃO IMEDIATA NECESSÁRIA: Existem {n_criticos} itens vencendo!</div>""", unsafe_allow_html=True)
+        
+        st.subheader("🚨 Lista de Prioridade Extrema")
+        # Transforma a lista de críticos em Tabela Visual
+        df_criticos = pd.DataFrame(criticos_lista)
+        
+        # Mostra tabela limpa só com o necessário
+        st.dataframe(
+            df_criticos[['Documento', 'Vencimento', 'Status']],
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        if st.button("📧 Enviar Alerta por E-mail para Equipe"):
+            st.toast("E-mail de alerta enviado para a diretoria! (Simulação)", icon="📩")
+            
+    elif n_atencao > 0:
+        st.markdown(f"""<div class="alert-box alert-green">✅ Nenhum item crítico. Foco nos itens de Atenção.</div>""", unsafe_allow_html=True)
     else:
-        st.success("Nenhuma prioridade crítica no momento.")
+        st.balloons()
+        st.success("Parabéns! O hospital está 100% em conformidade documental.")
 
-# --- TELA 2: GESTÃO DE PRAZOS (MODERNIZADA) ---
+# --- GESTÃO DE PRAZOS ---
 elif menu == "📅 Gestão de Prazos":
-    st.title("Central de Documentos")
-    st.markdown("Edite datas, nomes ou adicione novos itens diretamente na tabela abaixo.")
-
-    # Carrega dados do Google Sheets
+    st.title("Gestão de Documentos")
+    
     if 'df_prazos' not in st.session_state:
         st.session_state['df_prazos'] = carregar_dados_prazos()
 
     df_editavel = st.session_state['df_prazos']
 
-    # --- O PULO DO GATO: Tabela Editável ---
-    # num_rows="dynamic" permite adicionar e deletar linhas clicando na tabela!
+    # --- TABELA INTELIGENTE COM DATA AUTOMÁTICA ---
+    st.markdown("##### 📝 Tabela Editável")
+    st.caption("Clique na data para abrir o calendário. Selecione a linha e aperte 'Del' para excluir.")
+    
     df_alterado = st.data_editor(
         df_editavel,
-        num_rows="dynamic", 
+        num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Status": st.column_config.TextColumn("Status (Calculado)", disabled=True), # Bloqueia edição do status (é automático)
-            "Vencimento": st.column_config.TextColumn("Vencimento (DD/MM/AAAA)"),
+            "Status": st.column_config.TextColumn("Situação Atual", disabled=True),
+            # AQUI ESTÁ A MÁGICA DA BARRA "/" AUTOMÁTICA
+            "Vencimento": st.column_config.DateColumn(
+                "Data de Vencimento",
+                help="Clique para abrir o calendário",
+                format="DD/MM/YYYY", # Formato brasileiro visual
+                step=1
+            ),
             "Documento": st.column_config.TextColumn("Nome do Documento", width="large"),
         },
         key="editor_prazos"
     )
 
-    # Botão para efetivar as mudanças
-    col_btn1, col_btn2 = st.columns([1, 4])
-    with col_btn1:
-        if st.button("💾 Salvar Alterações na Nuvem", type="primary"):
-            # Recalcula status antes de salvar
+    col1, col2 = st.columns([1,3])
+    with col1:
+        if st.button("💾 Salvar Alterações", type="primary"):
+            # Atualiza status antes de salvar
             for index, row in df_alterado.iterrows():
-                try:
-                    d, s = calcular_status_e_cor(row['Vencimento'])
-                    df_alterado.at[index, 'Status'] = s
-                except:
-                    pass
+                d, s = calcular_status_e_cor(row['Vencimento'])
+                df_alterado.at[index, 'Status'] = s
             
-            # Manda pro Google Sheets
-            sucesso = sincronizar_prazos_completo(df_alterado)
-            if sucesso:
-                st.session_state['df_prazos'] = df_alterado # Atualiza memória local
-                st.balloons() # Efeito visual de sucesso
-    
-    with col_btn2:
-        st.caption("ℹ️ Para **Excluir**: Selecione a linha e aperte Delete no teclado. Para **Adicionar**: Clique na linha vazia no final.")
+            if sincronizar_prazos_completo(df_alterado):
+                st.session_state['df_prazos'] = df_alterado
+                st.success("Base de dados atualizada!")
 
-# --- TELA 3: VISTORIA (MANTIDA MAS BONITA) ---
-elif menu == "📸 Vistoria":
-    st.title("Checklist Mobile")
+# --- VISTORIA ---
+elif menu == "📸 Nova Vistoria":
+    st.title("Auditoria Mobile")
+    st.markdown("Preencha as não conformidades encontradas durante a visita.")
     
-    with st.container(border=True): # Caixa em volta para organizar
-        col_cam, col_form = st.columns([1, 1.5])
-        
-        with col_cam:
-            st.write("**1. Evidência**")
-            foto = st.camera_input("Tirar Foto")
-        
-        with col_form:
-            st.write("**2. Detalhes**")
-            setor = st.selectbox("Local", ["Recepção", "Raio-X", "UTI", "Expurgo", "Cozinha", "Outros"])
-            item = st.text_input("Item Avaliado")
+    with st.container(border=True):
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            st.write("📷 **Evidência**")
+            foto = st.camera_input("Capturar")
+        with c2:
+            st.write("📝 **Dados**")
+            setor = st.selectbox("Local", ["Recepção", "Raio-X", "UTI", "Expurgo", "Cozinha", "Engenharia", "Outros"])
+            item = st.text_input("O que está errado?", placeholder="Ex: Extintor Vencido")
             
-            c1, c2 = st.columns(2)
-            sit = c1.radio("Situação", ["✅ Conforme", "❌ Irregular"])
-            grav = c2.select_slider("Gravidade", ["Baixa", "Média", "Alta", "CRÍTICA"])
+            cc1, cc2 = st.columns(2)
+            sit = cc1.radio("Situação", ["❌ Irregular", "✅ Conforme"], horizontal=True)
+            grav = cc2.select_slider("Risco", ["Baixo", "Médio", "Alto", "CRÍTICO"])
             
-            obs = st.text_area("Observações")
+            obs = st.text_area("Plano de Ação / Obs")
             
-            if st.button("➕ Registrar Item", use_container_width=True):
-                st.session_state['vistorias'].append({
-                    "Setor": setor, "Item": item, "Situação": sit,
-                    "Gravidade": grav, "Obs": obs, "Foto_Binaria": foto
-                })
-                st.success("Registrado!")
+            if st.button("➕ Adicionar à Lista", type="primary", use_container_width=True):
+                if item:
+                    st.session_state['vistorias'].append({
+                        "Setor": setor, "Item": item, "Situação": sit,
+                        "Gravidade": grav, "Obs": obs, "Foto_Binaria": foto
+                    })
+                    st.toast("Item registrado!", icon="✅")
+                else:
+                    st.warning("Descreva o item.")
 
-# --- TELA 4: RELATÓRIOS ---
+# --- RELATÓRIOS ---
 elif menu == "📂 Relatórios":
-    st.title("Exportação")
-    
+    st.title("Central de Relatórios")
     qtd = len(st.session_state['vistorias'])
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.info(f"Itens nesta sessão: **{qtd}**")
-    with col2:
-        if st.button("☁️ Salvar Histórico no Drive"):
-            if qtd > 0:
-                salvar_vistoria_db(st.session_state['vistorias'])
-                st.toast("Histórico salvo!")
-            else:
-                st.warning("Lista vazia.")
-
-    st.markdown("### Prévia")
-    for item in st.session_state['vistorias']:
-        with st.expander(f"{item['Situação']} - {item['Item']}"):
-            st.write(item['Obs'])
-            if item['Foto_Binaria']: st.image(item['Foto_Binaria'], width=150)
-            
+    st.metric("Itens Vistoriados Hoje", qtd)
+    
     if qtd > 0:
-        pdf_bytes = gerar_pdf(st.session_state['vistorias'])
-        st.download_button("📥 Baixar Relatório PDF Completo", data=pdf_bytes, file_name="relatorio.pdf", mime="application/pdf", type="primary")
+        st.markdown("### Prévia da Auditoria")
+        for item in st.session_state['vistorias']:
+            with st.expander(f"{item['Situação']} {item['Item']} ({item['Setor']})"):
+                st.write(f"**Gravidade:** {item['Gravidade']}")
+                st.write(item['Obs'])
+                if item['Foto_Binaria']: st.image(item['Foto_Binaria'], width=200)
+
+        col1, col2 = st.columns(2)
+        with col1:
+             if st.button("☁️ Salvar no Google Drive"):
+                salvar_vistoria_db(st.session_state['vistorias'])
+                st.success("Salvo na nuvem!")
+        with col2:
+            pdf = gerar_pdf(st.session_state['vistorias'])
+            st.download_button("📥 Baixar PDF Final", data=pdf, file_name=f"Relatorio_{date.today()}.pdf", mime="application/pdf", type="primary")
+    else:
+        st.info("Inicie uma vistoria para gerar relatórios.")
