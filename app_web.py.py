@@ -12,13 +12,26 @@ st.set_page_config(page_title="LegalizaHealth", page_icon="🏥", layout="wide")
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 12)
-        self.cell(0, 10, 'Relatório de Vistoria - LegalizaHealth', 0, 1, 'C')
+        self.cell(0, 10, 'Relatorio de Vistoria - LegalizaHealth', 0, 1, 'C')
         self.ln(5)
 
     def footer(self):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
+        self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
+
+def limpar_texto_para_pdf(texto):
+    """
+    Remove emojis e garante que o texto funcione no PDF padrão.
+    """
+    if not isinstance(texto, str):
+        return str(texto)
+    
+    # Remove os emojis específicos que usamos
+    texto = texto.replace("✅", "").replace("❌", "").replace("🔴", "").replace("🟠", "").replace("🟢", "")
+    
+    # Tenta converter para latin-1 (padrão do PDF), substituindo caracteres impossíveis por '?'
+    return texto.encode('latin-1', 'replace').decode('latin-1').strip()
 
 def gerar_pdf(lista_vistorias):
     pdf = PDF()
@@ -27,29 +40,35 @@ def gerar_pdf(lista_vistorias):
     pdf.set_font("Arial", size=12)
 
     for i, item in enumerate(lista_vistorias):
+        # Prepara os textos (limpando emojis)
+        item_limpo = limpar_texto_para_pdf(item['Item'])
+        setor_limpo = limpar_texto_para_pdf(item['Setor'])
+        situacao_limpa = limpar_texto_para_pdf(item['Situação'])
+        gravidade_limpa = limpar_texto_para_pdf(item['Gravidade'])
+        obs_limpa = limpar_texto_para_pdf(item['Obs'])
+
         # Título do Item
         pdf.set_font("Arial", 'B', 14)
-        pdf.cell(0, 10, f"Item #{i+1}: {item['Item']} ({item['Setor']})", 0, 1)
+        pdf.cell(0, 10, f"Item #{i+1}: {item_limpo} ({setor_limpo})", 0, 1)
         
         # Detalhes
         pdf.set_font("Arial", size=11)
-        pdf.cell(0, 8, f"Situação: {item['Situação']}", 0, 1)
-        pdf.cell(0, 8, f"Gravidade: {item['Gravidade']}", 0, 1)
+        pdf.cell(0, 8, f"Situacao: {situacao_limpa}", 0, 1)
+        pdf.cell(0, 8, f"Gravidade: {gravidade_limpa}", 0, 1)
         
-        # Observação (Multi-cell para quebra de linha automática)
+        # Observação
         pdf.set_font("Arial", 'I', 11)
-        pdf.multi_cell(0, 8, f"Obs: {item['Obs']}")
+        pdf.multi_cell(0, 8, f"Obs: {obs_limpa}")
         pdf.ln(2)
 
         # Foto
         if item['Foto_Binaria'] is not None:
-            # Salva a imagem temporariamente para o PDF ler
             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_img:
                 temp_img.write(item['Foto_Binaria'].getbuffer())
                 temp_path = temp_img.name
             
-            # Adiciona ao PDF (Largura 60mm)
             try:
+                # Ajusta tamanho da imagem
                 pdf.image(temp_path, w=80)
                 pdf.ln(5)
             except:
@@ -58,11 +77,9 @@ def gerar_pdf(lista_vistorias):
         pdf.line(10, pdf.get_y(), 200, pdf.get_y()) # Linha divisória
         pdf.ln(10)
 
-    # Retorna o binário do PDF
     return pdf.output(dest='S').encode('latin-1')
 
 def calcular_status(data_vencimento):
-    # Recebe objeto DATE, não string. Mais fácil!
     hoje = date.today()
     dias_restantes = (data_vencimento - hoje).days
 
@@ -91,7 +108,6 @@ if menu == "Gestão de Prazos":
     with col1:
         novo_doc = st.text_input("Nome do Documento")
     with col2:
-        # AQUI ESTÁ A CORREÇÃO DA DATA:
         nova_data = st.date_input("Vencimento", format="DD/MM/YYYY")
     
     if st.button("➕ Adicionar Prazo"):
@@ -99,7 +115,7 @@ if menu == "Gestão de Prazos":
             dias, status, cor = calcular_status(nova_data)
             st.session_state['documentos'].append({
                 "Documento": novo_doc,
-                "Vencimento": nova_data.strftime("%d/%m/%Y"), # Formata bonito para tabela
+                "Vencimento": nova_data.strftime("%d/%m/%Y"),
                 "Dias Restantes": dias,
                 "Status": status
             })
@@ -121,6 +137,7 @@ elif menu == "Nova Vistoria":
             setor = st.selectbox("Setor", ["Recepção", "Raio-X", "UTI", "Expurgo", "Farmácia", "Cozinha", "Outro"])
             item_avaliado = st.text_input("Item Avaliado", placeholder="Ex: Extintor, Pia, Lixeira")
         with col_b:
+            # Emojis na tela (OK), mas serão removidos no PDF
             conformidade = st.radio("Situação", ["✅ Conforme", "❌ NÃO Conforme"], horizontal=True)
             prioridade = st.select_slider("Gravidade", options=["Baixa", "Média", "Alta", "CRÍTICA"])
 
@@ -134,7 +151,7 @@ elif menu == "Nova Vistoria":
                 "Situação": conformidade,
                 "Gravidade": prioridade,
                 "Obs": obs,
-                "Foto_Binaria": foto # Guardamos a foto real
+                "Foto_Binaria": foto 
             })
             st.success("Item salvo! Vá para a aba Relatório para baixar.")
 
@@ -146,15 +163,12 @@ elif menu == "Baixar Relatório PDF":
     st.write(f"Você tem **{qtd} itens** vistoriados nesta sessão.")
     
     if qtd > 0:
-        # Mostra prévia
         for item in st.session_state['vistorias']:
             with st.expander(f"{item['Item']} ({item['Setor']})"):
                 st.write(f"**Status:** {item['Situação']}")
-                st.write(f"**Obs:** {item['Obs']}")
                 if item['Foto_Binaria']:
                     st.image(item['Foto_Binaria'], width=200)
 
-        # Botão de Gerar PDF
         if st.button("Gerar PDF Agora"):
             try:
                 pdf_bytes = gerar_pdf(st.session_state['vistorias'])
