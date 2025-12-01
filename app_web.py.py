@@ -52,11 +52,17 @@ def salvar_vistoria_db(lista_itens):
     """Salva o resumo da vistoria na planilha"""
     try:
         sh = conectar_gsheets()
-        ws = sh.worksheet("Vistorias")
+        
+        # Tenta abrir a aba, se não existir, cria ela
+        try:
+            ws = sh.worksheet("Vistorias")
+        except:
+            ws = sh.add_worksheet(title="Vistorias", rows=1000, cols=10)
+            ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data"]) # Cabeçalho
+
         hoje = date.today().strftime("%d/%m/%Y")
         
         for item in lista_itens:
-            # Formato: Setor, Item, Situação, Gravidade, Obs, Data
             ws.append_row([
                 item['Setor'], 
                 item['Item'], 
@@ -199,3 +205,4 @@ elif menu == "Baixar Relatório PDF":
                 pdf_bytes = gerar_pdf(st.session_state['vistorias'])
                 st.download_button("📥 Baixar PDF", data=pdf_bytes, file_name=f"relatorio_{date.today()}.pdf", mime="application/pdf")
             except Exception as e: st.error(f"Erro PDF: {e}")
+
