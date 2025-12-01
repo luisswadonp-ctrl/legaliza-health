@@ -1,164 +1,172 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
+from fpdf import FPDF
+import tempfile
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="LegalizaHealth", page_icon="🏥", layout="wide")
 
-# --- 1. LÓGICA DE NEGÓCIO (CÉREBRO) ---
+# --- FUNÇÕES ÚTEIS ---
 
-def calcular_status(data_vencimento_str):
-    try:
-        # Tenta converter formato brasileiro
-        data_venc = datetime.strptime(data_vencimento_str, "%d/%m/%Y").date()
-    except ValueError:
-        try:
-             # Tenta formato internacional (caso o excel salve assim)
-             data_venc = datetime.strptime(data_vencimento_str, "%Y-%m-%d").date()
-        except:
-            return None, "Erro Data", "grey"
+class PDF(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 12)
+        self.cell(0, 10, 'Relatório de Vistoria - LegalizaHealth', 0, 1, 'C')
+        self.ln(5)
 
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
+
+def gerar_pdf(lista_vistorias):
+    pdf = PDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    for i, item in enumerate(lista_vistorias):
+        # Título do Item
+        pdf.set_font("Arial", 'B', 14)
+        pdf.cell(0, 10, f"Item #{i+1}: {item['Item']} ({item['Setor']})", 0, 1)
+        
+        # Detalhes
+        pdf.set_font("Arial", size=11)
+        pdf.cell(0, 8, f"Situação: {item['Situação']}", 0, 1)
+        pdf.cell(0, 8, f"Gravidade: {item['Gravidade']}", 0, 1)
+        
+        # Observação (Multi-cell para quebra de linha automática)
+        pdf.set_font("Arial", 'I', 11)
+        pdf.multi_cell(0, 8, f"Obs: {item['Obs']}")
+        pdf.ln(2)
+
+        # Foto
+        if item['Foto_Binaria'] is not None:
+            # Salva a imagem temporariamente para o PDF ler
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_img:
+                temp_img.write(item['Foto_Binaria'].getbuffer())
+                temp_path = temp_img.name
+            
+            # Adiciona ao PDF (Largura 60mm)
+            try:
+                pdf.image(temp_path, w=80)
+                pdf.ln(5)
+            except:
+                pdf.cell(0, 10, "[Erro ao processar imagem]", 0, 1)
+        
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y()) # Linha divisória
+        pdf.ln(10)
+
+    # Retorna o binário do PDF
+    return pdf.output(dest='S').encode('latin-1')
+
+def calcular_status(data_vencimento):
+    # Recebe objeto DATE, não string. Mais fácil!
     hoje = date.today()
-    dias_restantes = (data_venc - hoje).days
+    dias_restantes = (data_vencimento - hoje).days
 
     if dias_restantes <= 3:
-        return dias_restantes, "🔴 PRIORIDADE TOTAL", "#ff4d4d" # Vermelho
+        return dias_restantes, "🔴 PRIORIDADE TOTAL", "#ff4d4d"
     elif dias_restantes <= 15:
-        return dias_restantes, "🟠 Atenção (Alta)", "#ffa500" # Laranja
+        return dias_restantes, "🟠 Atenção (Alta)", "#ffa500"
     else:
-        return dias_restantes, "🟢 No Prazo", "#28a745" # Verde
+        return dias_restantes, "🟢 No Prazo", "#28a745"
 
-# --- 2. SISTEMA DE DADOS (SIMULAÇÃO) ---
-# Como estamos na web, usamos "Session State" para guardar dados enquanto a aba está aberta.
-# Num futuro próximo, substituiremos isso por Google Sheets ou Banco de Dados.
-
+# --- ESTADO DA SESSÃO ---
 if 'documentos' not in st.session_state:
     st.session_state['documentos'] = []
-
 if 'vistorias' not in st.session_state:
     st.session_state['vistorias'] = []
 
-# --- 3. INTERFACE (SIDEBAR - MENU LATERAL) ---
-st.sidebar.title("🏥 Menu Principal")
-menu = st.sidebar.radio("Navegar para:", ["Gestão de Prazos", "Nova Vistoria", "Relatórios"])
+# --- INTERFACE ---
+st.sidebar.title("🏥 Menu")
+menu = st.sidebar.radio("Ir para:", ["Gestão de Prazos", "Nova Vistoria", "Baixar Relatório PDF"])
 
-# --- PÁGINA 1: GESTÃO DE PRAZOS (O que já fizemos) ---
+# --- 1. GESTÃO DE PRAZOS ---
 if menu == "Gestão de Prazos":
-    st.title("📅 Gestão de Prazos Críticos")
-    st.markdown("---")
-
-    # Formulário na barra lateral ou no topo
-    col1, col2, col3 = st.columns([3, 2, 1])
-    with col1:
-        novo_doc = st.text_input("Nome do Documento / Pendência")
-    with col2:
-        nova_data = st.text_input("Data (dd/mm/aaaa)")
-    with col3:
-        st.write("") # Espaço para alinhar o botão
-        st.write("")
-        btn_add = st.button("➕ Adicionar")
-
-    if btn_add:
-        if novo_doc and nova_data:
-            dias, status, cor = calcular_status(nova_data)
-            if dias is not None:
-                # Adiciona na lista
-                st.session_state['documentos'].append({
-                    "Documento": novo_doc,
-                    "Vencimento": nova_data,
-                    "Dias Restantes": dias,
-                    "Status": status,
-                    "Cor": cor
-                })
-                st.success("Adicionado!")
-            else:
-                st.error("Data inválida. Use dia/mês/ano")
-        else:
-            st.warning("Preencha tudo.")
-
-    # Exibição dos Dados (Estilo Tabela Excel)
-    if len(st.session_state['documentos']) > 0:
-        # Criamos um DataFrame (Tabela Inteligente)
-        df = pd.DataFrame(st.session_state['documentos'])
-        
-        # Mostramos na tela cartões para os itens CRÍTICOS (Regra da Vida)
-        criticos = df[df['Status'] == "🔴 PRIORIDADE TOTAL"]
-        if not criticos.empty:
-            st.error(f"🚨 ATENÇÃO: Existem {len(criticos)} itens com PRIORIDADE TOTAL!")
-            for index, row in criticos.iterrows():
-                st.toast(f"URGENTE: {row['Documento']} vence em {row['Dias Restantes']} dias!")
-
-        # Mostra a tabela completa colorida
-        st.subheader("Lista de Monitoramento")
-        
-        # Função para colorir a tabela visualmente
-        def colorir_linhas(val):
-            color = 'white'
-            if val == "🔴 PRIORIDADE TOTAL": color = '#ffcccc'
-            elif val == "🟠 Atenção (Alta)": color = '#fff4cc'
-            elif val == "🟢 No Prazo": color = '#ccffcc'
-            return f'background-color: {color}'
-
-        # Mostra tabela (sem a coluna 'Cor' que é interna)
-        st.dataframe(df[['Documento', 'Vencimento', 'Dias Restantes', 'Status']], use_container_width=True)
-        
-        if st.button("🗑️ Limpar Lista"):
-            st.session_state['documentos'] = []
-            st.rerun()
-
-# --- PÁGINA 2: NOVA VISTORIA (NOVIDADE!) ---
-elif menu == "Nova Vistoria":
-    st.title("📸 Checklist de Auditoria")
-    st.markdown("Use esta tela durante a caminhada no hospital.")
+    st.title("📅 Gestão de Prazos")
     
-    with st.form("form_vistoria"):
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        novo_doc = st.text_input("Nome do Documento")
+    with col2:
+        # AQUI ESTÁ A CORREÇÃO DA DATA:
+        nova_data = st.date_input("Vencimento", format="DD/MM/YYYY")
+    
+    if st.button("➕ Adicionar Prazo"):
+        if novo_doc:
+            dias, status, cor = calcular_status(nova_data)
+            st.session_state['documentos'].append({
+                "Documento": novo_doc,
+                "Vencimento": nova_data.strftime("%d/%m/%Y"), # Formata bonito para tabela
+                "Dias Restantes": dias,
+                "Status": status
+            })
+            st.success("Adicionado!")
+        else:
+            st.warning("Digite o nome do documento.")
+
+    if st.session_state['documentos']:
+        df = pd.DataFrame(st.session_state['documentos'])
+        st.dataframe(df, use_container_width=True)
+
+# --- 2. NOVA VISTORIA ---
+elif menu == "Nova Vistoria":
+    st.title("📸 Checklist de Vistoria")
+    
+    with st.form("form_vistoria", clear_on_submit=True):
         col_a, col_b = st.columns(2)
-        
         with col_a:
-            setor = st.selectbox("Setor / Sala", ["Recepção", "Raio-X", "UTI", "Expurgo", "Farmácia", "Cozinha"])
-            item_avaliado = st.text_input("Item Avaliado", placeholder="Ex: Lixeira Infectante")
-        
+            setor = st.selectbox("Setor", ["Recepção", "Raio-X", "UTI", "Expurgo", "Farmácia", "Cozinha", "Outro"])
+            item_avaliado = st.text_input("Item Avaliado", placeholder="Ex: Extintor, Pia, Lixeira")
         with col_b:
-            conformidade = st.radio("Situação", ["✅ Conforme", "❌ NÃO Conforme"])
+            conformidade = st.radio("Situação", ["✅ Conforme", "❌ NÃO Conforme"], horizontal=True)
             prioridade = st.select_slider("Gravidade", options=["Baixa", "Média", "Alta", "CRÍTICA"])
 
-        obs = st.text_area("Observações / O que precisa ser feito?")
+        obs = st.text_area("Observações")
+        foto = st.camera_input("Foto da Evidência")
         
-        # O PULO DO GATO: Tira foto na hora
-        foto = st.camera_input("Tirar foto da evidência")
-        
-        enviar = st.form_submit_button("💾 Salvar Item da Vistoria")
-
-        if enviar:
-            dados_vistoria = {
+        if st.form_submit_button("💾 Salvar na Lista"):
+            st.session_state['vistorias'].append({
                 "Setor": setor,
                 "Item": item_avaliado,
                 "Situação": conformidade,
                 "Gravidade": prioridade,
                 "Obs": obs,
-                "Foto": "Sim" if foto else "Não"
-            }
-            st.session_state['vistorias'].append(dados_vistoria)
-            st.success("Item registrado no relatório!")
+                "Foto_Binaria": foto # Guardamos a foto real
+            })
+            st.success("Item salvo! Vá para a aba Relatório para baixar.")
 
-# --- PÁGINA 3: RELATÓRIOS ---
-elif menu == "Relatórios":
-    st.title("📊 Relatório Consolidado")
+# --- 3. RELATÓRIOS ---
+elif menu == "Baixar Relatório PDF":
+    st.title("📄 Exportar Relatório")
     
-    if len(st.session_state['vistorias']) > 0:
-        df_vistoria = pd.DataFrame(st.session_state['vistorias'])
-        st.write("Itens vistoriados nesta sessão:")
-        st.dataframe(df_vistoria, use_container_width=True)
-        
-        # Botão para baixar Excel (Simulando o relatório final)
-        # O Streamlit converte o DataFrame para CSV nativamente
-        csv = df_vistoria.to_csv(index=False).encode('utf-8')
-        
-        st.download_button(
-            label="📥 Baixar Relatório (Excel/CSV)",
-            data=csv,
-            file_name=f"relatorio_vistoria_{date.today()}.csv",
-            mime="text/csv",
-        )
+    qtd = len(st.session_state['vistorias'])
+    st.write(f"Você tem **{qtd} itens** vistoriados nesta sessão.")
+    
+    if qtd > 0:
+        # Mostra prévia
+        for item in st.session_state['vistorias']:
+            with st.expander(f"{item['Item']} ({item['Setor']})"):
+                st.write(f"**Status:** {item['Situação']}")
+                st.write(f"**Obs:** {item['Obs']}")
+                if item['Foto_Binaria']:
+                    st.image(item['Foto_Binaria'], width=200)
+
+        # Botão de Gerar PDF
+        if st.button("Gerar PDF Agora"):
+            try:
+                pdf_bytes = gerar_pdf(st.session_state['vistorias'])
+                
+                st.download_button(
+                    label="📥 Clique aqui para baixar o PDF",
+                    data=pdf_bytes,
+                    file_name=f"relatorio_vistoria_{date.today()}.pdf",
+                    mime="application/pdf"
+                )
+            except Exception as e:
+                st.error(f"Erro ao gerar PDF: {e}")
+
     else:
-        st.info("Nenhuma vistoria realizada ainda.")
+        st.info("Faça algumas vistorias primeiro.")
