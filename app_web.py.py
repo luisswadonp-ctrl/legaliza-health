@@ -10,7 +10,6 @@ import base64
 import requests
 import streamlit.components.v1 as components
 import pytz
-import os # Importante para lidar com arquivos
 
 # --- 1. CONFIGURAÇÃO GERAL ---
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
@@ -27,7 +26,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES VISUAIS ---
+# --- FUNÇÕES ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -50,8 +49,6 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-
-# --- 2. CONEXÃO E DADOS ---
 
 def conectar_gsheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -92,9 +89,7 @@ def sincronizar_prazos_completo(df_novo):
         ws.clear()
         
         df_salvar = df_novo.copy()
-        if 'Prazo' in df_salvar.columns:
-            df_salvar = df_salvar.drop(columns=['Prazo'])
-            
+        if 'Prazo' in df_salvar.columns: df_salvar = df_salvar.drop(columns=['Prazo'])
         df_salvar['Concluido'] = df_salvar['Concluido'].astype(str)
         df_salvar['Vencimento'] = df_salvar['Vencimento'].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
         
@@ -132,6 +127,15 @@ def carregar_dados_prazos():
     except:
         return pd.DataFrame(columns=["Documento", "Vencimento", "Status", "Concluido"])
 
+def carregar_historico_vistorias():
+    try:
+        sh = conectar_gsheets()
+        ws = sh.worksheet("Vistorias")
+        data = ws.get_all_records()
+        return pd.DataFrame(data)
+    except:
+        return pd.DataFrame()
+
 def calcular_status_e_texto(data_venc, concluido):
     if concluido: return 999, "✅ RESOLVIDO", "---"
     if pd.isnull(data_venc): return 0, "⚪ DATA INVÁLIDA", "---"
@@ -156,59 +160,41 @@ def calcular_status_e_texto(data_venc, concluido):
         txt = f"📅 {dias} dias restantes"
     return dias, status, txt
 
-# --- PDF GENERATOR CORRIGIDO ---
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 12)
         self.cell(0, 10, 'Relatorio LegalizaHealth', 0, 1, 'C')
         self.ln(5)
-
 def limpar_txt(t):
     return str(t).replace("✅","").replace("❌","").encode('latin-1','replace').decode('latin-1')
 
 def gerar_pdf(vistorias):
     pdf = PDF()
     pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    
     for i, item in enumerate(vistorias):
-        # Título do Item
-        pdf.set_font("Arial", 'B', 14)
-        pdf.cell(0, 10, f"Item #{i+1}: {limpar_txt(item['Item'])}", 0, 1)
+        pdf.set_font("Arial", 'B', 12)
+        item_nome = item.get('Item', 'Item sem nome')
+        pdf.cell(0, 10, f"Item #{i+1}: {limpar_txt(item_nome)}", 0, 1)
         
-        # Detalhes
-        pdf.set_font("Arial", size=11)
-        pdf.cell(0, 7, f"Setor: {limpar_txt(item['Setor'])}", 0, 1)
-        pdf.cell(0, 7, f"Situacao: {limpar_txt(item['Situação'])} | Gravidade: {limpar_txt(item['Gravidade'])}", 0, 1)
+        pdf.set_font("Arial", size=10)
+        setor = item.get('Setor', '')
+        obs = item.get('Obs', '')
+        sit = item.get('Situação', '')
         
-        # Observação (Bloco separado para não quebrar)
-        pdf.set_font("Arial", 'I', 11)
-        pdf.multi_cell(0, 7, f"Obs: {limpar_txt(item['Obs'])}")
-        pdf.ln(2)
-
-        # FOTO (Correção aqui)
-        if item['Foto_Binaria']:
+        pdf.multi_cell(0, 6, f"Local: {limpar_txt(setor)}\nSituacao: {limpar_txt(sit)}\nObs: {limpar_txt(obs)}")
+        
+        # Tenta pegar foto se existir (só funciona na sessão atual)
+        if 'Foto_Binaria' in item and item['Foto_Binaria']:
             try:
-                # 1. Cria arquivo temporário no disco
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-                    # 2. Escreve os bytes da foto nele
-                    temp_file.write(item['Foto_Binaria'].getvalue())
-                    temp_file_path = temp_file.name
-                
-                # 3. PDF lê do arquivo físico
-                # x=10 (margem esq), w=80 (largura boa)
-                pdf.image(temp_file_path, x=10, w=80) 
-                pdf.ln(5)
-                
-                # 4. (Opcional) Limpeza do arquivo temp, mas o linux limpa depois
-                # os.unlink(temp_file_path) 
-            except Exception as e:
-                pdf.set_font("Arial", "I", 8)
-                pdf.cell(0, 10, f"[Erro ao processar imagem: {str(e)}]", 0, 1)
-        
-        pdf.line(10, pdf.get_y(), 200, pdf.get_y()) # Linha divisória
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
+                    t.write(item['Foto_Binaria'].getbuffer())
+                    pdf.image(t.name, w=60)
+            except: pass
+        else:
+            pdf.set_font("Arial", "I", 8)
+            pdf.cell(0, 10, "(Foto disponivel apenas no relatorio original do dia)", 0, 1)
+            
         pdf.ln(5)
-
     return bytes(pdf.output(dest='S'))
 
 # --- INTERFACE ---
@@ -227,7 +213,7 @@ try:
     agora = datetime.now()
     diff = (agora - st.session_state['ultima_notificacao']).total_seconds() / 60
     
-    # Lógica de Dados Global
+    # Lógica Global
     df_global = carregar_dados_prazos()
     df_global['Prazo'] = ""
     criticos_lista = []
@@ -312,11 +298,44 @@ elif menu == "📸 Nova Vistoria":
             st.success("Registrado!")
 
 elif menu == "📂 Relatórios":
-    st.title("Relatórios")
-    qtd = len(st.session_state['vistorias'])
-    st.metric("Itens Vistoriados", qtd)
-    if qtd > 0:
-        c1, c2 = st.columns(2)
-        if c1.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
-        pdf = gerar_pdf(st.session_state['vistorias'])
-        c2.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio.pdf", mime="application/pdf", type="primary")
+    st.title("Central de Relatórios")
+    
+    tab1, tab2 = st.tabs(["📝 Vistoria Atual", "🗄️ Histórico Completo (Banco de Dados)"])
+    
+    # --- TAB 1: SESSÃO ATUAL ---
+    with tab1:
+        qtd = len(st.session_state['vistorias'])
+        st.metric("Itens Vistoriados Hoje", qtd)
+        if qtd > 0:
+            c1, c2 = st.columns(2)
+            if c1.button("☁️ Salvar Nuvem", key="bt_salvar"): 
+                salvar_vistoria_db(st.session_state['vistorias'])
+                st.toast("Salvo!")
+            pdf = gerar_pdf(st.session_state['vistorias'])
+            c2.download_button("📥 Baixar PDF (Com Fotos)", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
+        else:
+            st.info("Nenhuma vistoria feita agora.")
+
+    # --- TAB 2: HISTÓRICO ---
+    with tab2:
+        st.caption("Consulte vistorias passadas salvas no Google Sheets.")
+        df_hist = carregar_historico_vistorias()
+        
+        if not df_hist.empty:
+            # Filtro de Data
+            datas_disponiveis = df_hist['Data'].unique()
+            data_selecionada = st.selectbox("Selecione a Data do Relatório:", datas_disponiveis)
+            
+            # Filtra DF
+            df_filtrado = df_hist[df_hist['Data'] == data_selecionada]
+            
+            st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+            
+            if st.button(f"📥 Re-gerar PDF de {data_selecionada}"):
+                # Converte para lista de dicionários
+                lista_recuperada = df_filtrado.to_dict('records')
+                # Gera PDF (sem fotos, pois não salvamos no sheets)
+                pdf_hist = gerar_pdf(lista_recuperada)
+                st.download_button("Baixar Arquivo", data=pdf_hist, file_name=f"Relatorio_{data_selecionada}.pdf", mime="application/pdf")
+        else:
+            st.warning("Nenhum histórico encontrado na planilha.")
