@@ -17,13 +17,9 @@ st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wi
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 
 # --- INTERVALOS DE NOTIFICAÇÃO (EM MINUTOS) ---
-# O sistema só mandará mensagem de novo se já tiver passado esse tempo
-INTERVALO_ATRASADO = 20  
-INTERVALO_HOJE = 60      
-INTERVALO_CRITICO = 120   
+INTERVALO_GERAL = 60 # O Robô vai checar e mandar o resumo a cada 60 minutos
 
-# --- AUTO-REFRESH (O SEGREDO PARA NÃO TRAVAR) ---
-# Isso recarrega a página a cada 60 segundos automaticamente
+# --- AUTO-REFRESH (60 segundos) ---
 refresh_code = """
 <script>
     setTimeout(function(){
@@ -36,15 +32,13 @@ components.html(refresh_code, height=0)
 # Função para carregar imagem
 def get_img_as_base64(file):
     try:
-        with open(file, "rb") as f:
-            data = f.read()
+        with open(file, "rb") as f: data = f.read()
         return base64.b64encode(data).decode()
-    except:
-        return ""
+    except: return ""
 
 img_loading = get_img_as_base64("loading.gif")
 
-# CSS (Dark Mode Ajustado)
+# CSS (Dark Mode)
 st.markdown(f"""
 <style>
     .stApp {{ background-color: #0e1117; color: #e0e0e0; }}
@@ -56,10 +50,6 @@ st.markdown(f"""
         border-radius: 8px; font-weight: bold; text-transform: uppercase;
         background-image: linear-gradient(to right, #2563eb, #1d4ed8);
         border: none; color: white;
-    }}
-    /* Status Labels */
-    .status-badge {{
-        padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9em;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -73,22 +63,33 @@ def conectar_gsheets():
     client = gspread.authorize(creds)
     return client.open("LegalizaHealth_DB")
 
-def enviar_notificacao_push(documento, data_venc, dias_restantes, status):
-    """Envia notificação inteligente"""
-    
-    if dias_restantes < 0:
-        prio = "urgent"; tags = "rotating_light,skull"; titulo = f"⛔ ATRASADO: {documento}"
-    elif dias_restantes == 0:
-        prio = "high"; tags = "boom,clock4"; titulo = f"💥 VENCE HOJE: {documento}"
-    elif dias_restantes <= 7:
-        prio = "high"; tags = "warning"; titulo = f"🚨 URGENTE ({dias_restantes}d): {documento}"
-    else:
-        return False 
+def enviar_resumo_push(lista_problemas):
+    """
+    Envia UMA única notificação com a lista de problemas
+    Isso evita a cascata de mensagens.
+    """
+    qtd = len(lista_problemas)
+    if qtd == 0: return False
 
-    # Converte data para string se não for
-    data_str = str(data_venc)
+    # Define urgência baseado no pior caso
+    tem_atrasado = any("ATRASADO" in p['status'] for p in lista_problemas)
     
-    mensagem = f"Prazo: {data_str}\nStatus: {status}\nVerifique o app!"
+    if tem_atrasado:
+        titulo = f"⛔ URGENTE: {qtd} Pendências Graves"
+        tags = "rotating_light,skull"
+        prio = "urgent" # Toca alto
+    else:
+        titulo = f"⚠️ ALERTA: {qtd} Prazos Próximos"
+        tags = "warning"
+        prio = "high"
+
+    # Monta o texto do resumo (Máximo 5 linhas para não cortar)
+    mensagem = "Resumo da Situação:\n"
+    for p in lista_problemas[:5]:
+        mensagem += f"- {p['doc']} ({p['status']})\n"
+    
+    if qtd > 5:
+        mensagem += f"...e mais {qtd-5} itens."
 
     try:
         requests.post(
@@ -107,7 +108,7 @@ def sincronizar_prazos_completo(df_novo):
         ws.clear()
         df_salvar = df_novo.copy()
         df_salvar['Concluido'] = df_salvar['Concluido'].astype(str)
-        # Garante que NaT vire string vazia ou texto
+        # Garante data como string
         df_salvar['Vencimento'] = df_salvar['Vencimento'].astype(str).replace("NaT", "")
         
         lista_dados = [df_salvar.columns.values.tolist()] + df_salvar.values.tolist()
@@ -136,24 +137,25 @@ def carregar_dados_prazos():
         df = pd.DataFrame(dados)
         if "Concluido" not in df.columns: df["Concluido"] = "False"
         
-        # Tratamento Robusto de Datas (CORREÇÃO DO NaT)
-        df['Vencimento'] = pd.to_datetime(df['Vencimento'], dayfirst=True, errors='coerce').dt.date
+        # --- CORREÇÃO DA DATA (O SEGREDO) ---
+        # Forçamos o pandas a entender que o primeiro número é DIA (%d/%m/%Y)
+        # errors='coerce' transforma erros em NaT (que tratamos depois)
+        df['Vencimento'] = pd.to_datetime(df['Vencimento'], format="%d/%m/%Y", errors='coerce').dt.date
         
         df['Concluido'] = df['Concluido'].astype(str).str.upper() == 'TRUE'
         return df
-    except:
+    except Exception as e:
+        # st.error(f"Erro ao ler datas: {e}") # Debug se precisar
         return pd.DataFrame(columns=["Documento", "Vencimento", "Status", "Concluido"])
 
 def calcular_status(data_venc, concluido):
     if concluido: return 999, "✅ RESOLVIDO"
-    
-    # Se a data for inválida (NaT), retorna erro amigável
     if pd.isnull(data_venc): return 0, "⚪ DATA INVÁLIDA"
     
     hoje = date.today()
     dias = (data_venc - hoje).days
     
-    # NOVAS REGRAS DE PRAZO
+    # NOVAS REGRAS
     if dias < 0: return dias, "⛔ ATRASADO"
     elif dias == 0: return dias, "💥 VENCE HOJE"
     elif dias <= 7: return dias, "🔴 CRÍTICO" # Até 7 dias
@@ -187,165 +189,9 @@ def gerar_pdf(vistorias):
 # --- INTERFACE PRINCIPAL ---
 
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
-if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notificacao'] = {}
+if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notificacao'] = datetime.min
 
 # Sidebar
 with st.sidebar:
     if img_loading:
-        st.markdown(f'<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px; margin-bottom:15px;"></div>', unsafe_allow_html=True)
-    else:
-        st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=80)
-    
-    st.markdown("### LegalizaHealth Pro")
-    st.caption(f"Atualização Automática: 60s")
-    menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Prazos", "📸 Nova Vistoria", "📂 Relatórios"])
-    st.markdown("---")
-
-# --- ROBÔ SILENCIOSO (RODA SEMPRE NO TOPO) ---
-# Ele carrega os dados e verifica se precisa notificar
-try:
-    df_robo = carregar_dados_prazos()
-    agora = datetime.now()
-    
-    for index, row in df_robo.iterrows():
-        if not row['Concluido']:
-            dias, status = calcular_status(row['Vencimento'], False)
-            
-            # Define intervalo
-            intervalo_minutos = None
-            if dias < 0: intervalo_minutos = INTERVALO_ATRASADO
-            elif dias == 0: intervalo_minutos = INTERVALO_HOJE
-            elif dias <= 7: intervalo_minutos = INTERVALO_CRITICO
-            
-            if intervalo_minutos:
-                chave_doc = row['Documento']
-                ultima_vez = st.session_state['ultima_notificacao'].get(chave_doc)
-                
-                mandar_agora = False
-                if ultima_vez is None:
-                    mandar_agora = True
-                else:
-                    diferenca = (agora - ultima_vez).total_seconds() / 60
-                    if diferenca >= intervalo_minutos:
-                        mandar_agora = True
-                
-                if mandar_agora:
-                    # Tenta converter a data para string segura antes de enviar
-                    data_segura = str(row['Vencimento']) if not pd.isnull(row['Vencimento']) else "Data Inválida"
-                    sucesso = enviar_notificacao_push(row['Documento'], data_segura, dias, status)
-                    if sucesso:
-                        st.session_state['ultima_notificacao'][chave_doc] = agora
-                        st.toast(f"🤖 Alerta Auto: {row['Documento']}")
-except Exception as e:
-    # Se der erro no robô, não trava o site, apenas mostra um aviso pequeno
-    print(f"Erro robô: {e}")
-
-# --- 1. DASHBOARD ---
-if menu == "📊 Dashboard":
-    st.title("Painel de Controle")
-    
-    # Usa os dados já carregados pelo robô
-    df = df_robo 
-    
-    criticos_lista = []
-    atencao_lista = []
-    
-    # Cria coluna formatada
-    df['Prazo_Txt'] = ""
-
-    for index, row in df.iterrows():
-        d, s = calcular_status(row['Vencimento'], row['Concluido'])
-        df.at[index, 'Status'] = s
-        
-        # Correção do NaT na exibição
-        if s == "⚪ DATA INVÁLIDA":
-            df.at[index, 'Prazo_Txt'] = "---"
-        elif d < 0: df.at[index, 'Prazo_Txt'] = f"🚨 {abs(d)} dias ATRASO"
-        elif d == 0: df.at[index, 'Prazo_Txt'] = "💥 VENCE HOJE"
-        else: df.at[index, 'Prazo_Txt'] = f"{d} dias restantes"
-        
-        if not row['Concluido']:
-            if "CRÍTICO" in s or "ATRASADO" in s or "VENCE HOJE" in s: criticos_lista.append(row)
-            if "ALTO" in s: atencao_lista.append(row)
-
-    n_criticos = len(criticos_lista)
-    n_atencao = len(atencao_lista)
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("🚨 Risco Imediato", n_criticos, delta="Ação Necessária" if n_criticos > 0 else "OK", delta_color="inverse")
-    c2.metric("🟠 Prioridade Alta", n_atencao, delta_color="off")
-    c3.metric("📋 Total", len(df))
-
-    st.markdown("---")
-    
-    if n_criticos > 0:
-        st.error(f"⚠️ Existem {n_criticos} itens pendentes com risco!")
-        df_criticos = pd.DataFrame(criticos_lista)
-        # Mostra a coluna formatada bonita
-        st.dataframe(
-            df_criticos[['Documento', 'Vencimento', 'Prazo_Txt', 'Status']], 
-            use_container_width=True, 
-            hide_index=True
-        )
-    else:
-        st.success("Tudo tranquilo por enquanto.")
-
-# --- 2. GESTÃO DE PRAZOS ---
-elif menu == "📅 Gestão de Prazos":
-    st.title("Gestão de Documentos")
-    st.caption("Datas inválidas aparecerão como 'NaT' ou vazias. Corrija clicando nelas.")
-    
-    if 'df_prazos' not in st.session_state: st.session_state['df_prazos'] = carregar_dados_prazos()
-    df_editavel = st.session_state['df_prazos']
-
-    df_alterado = st.data_editor(
-        df_editavel,
-        num_rows="dynamic",
-        use_container_width=True,
-        column_config={
-            "Concluido": st.column_config.CheckboxColumn("✅ Feito?", default=False),
-            "Status": st.column_config.TextColumn("Status", disabled=True),
-            "Vencimento": st.column_config.DateColumn("Vencimento", format="DD/MM/YYYY", step=1),
-            "Documento": st.column_config.TextColumn("Nome", width="large"),
-        },
-        key="editor_prazos"
-    )
-
-    if st.button("💾 SALVAR E ATUALIZAR", type="primary", use_container_width=True):
-        for index, row in df_alterado.iterrows():
-            d, s = calcular_status(row['Vencimento'], row['Concluido'])
-            df_alterado.at[index, 'Status'] = s
-        
-        if sincronizar_prazos_completo(df_alterado):
-            st.session_state['df_prazos'] = df_alterado
-            st.success("✅ Atualizado!")
-
-# --- 3. VISTORIA ---
-elif menu == "📸 Nova Vistoria":
-    st.title("Auditoria Mobile")
-    with st.container(border=True):
-        c1, c2 = st.columns([1, 2])
-        c1.write("📷 **Foto**"); foto = c1.camera_input("Capturar")
-        c2.write("📝 **Dados**")
-        setor = c2.selectbox("Local", ["Recepção", "Raio-X", "UTI", "Expurgo", "Cozinha", "Outros"])
-        item = c2.text_input("Item")
-        sit = c2.radio("Situação", ["❌ Irregular", "✅ Conforme"], horizontal=True)
-        grav = c2.select_slider("Risco", ["Baixo", "Médio", "Alto", "CRÍTICO"])
-        obs = c2.text_area("Obs")
-        
-        if st.button("➕ REGISTRAR", type="primary", use_container_width=True):
-            st.session_state['vistorias'].append({"Setor": setor, "Item": item, "Situação": sit, "Gravidade": grav, "Obs": obs, "Foto_Binaria": foto})
-            st.success("Registrado!")
-            if grav == "CRÍTICO":
-                enviar_notificacao_push(f"VISTORIA: {item}", "HOJE", 0, "PROBLEMA CRÍTICO DETECTADO")
-
-# --- 4. RELATÓRIOS ---
-elif menu == "📂 Relatórios":
-    st.title("Relatórios")
-    qtd = len(st.session_state['vistorias'])
-    st.metric("Itens Vistoriados", qtd)
-    if qtd > 0:
-        c1, c2 = st.columns(2)
-        if c1.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
-        pdf = gerar_pdf(st.session_state['vistorias'])
-        c2.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio.pdf", mime="application/pdf", type="primary")
+        st.markdown(f'<div style="text-
