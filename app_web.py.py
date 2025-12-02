@@ -142,7 +142,7 @@ def processar_dados_importados(uploaded_file):
         'Vencimento': ['DATA LIMITE DE ATENDIMENTO', 'VENCIMENTO', 'SLA ESPERADO'],
         'Data_Recebimento': ['DATA DO DOCUMENTO/RECEBIDO PELA UNIDADE', 'DATA INÍCIO', 'DATA ENVIO PGTO'],
         'Status_Origem': ['STATUS DO PROCESSO', 'STATUS'],
-        'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO', 'OBSERVAÇÕES', 'OBSERVAÇÃO'], 
+        'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO', 'OBSERVAÇÕES', 'OBSERVAÇÃO'],
     }
     
     df_result = pd.DataFrame()
@@ -188,6 +188,7 @@ def processar_dados_importados(uploaded_file):
             df_final[col] = 'Não Informado'
             
     return df_final.copy()
+
 
 # --- FUNÇÕES DE CONEXÃO E SALVAMENTO ---
 
@@ -365,7 +366,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v36.0 - Estabilidade Final")
+    st.caption("v35.0 - Estabilidade Final")
 
 # --- ROBÔ ---
 try:
