@@ -171,7 +171,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_c['Feito'] = df_c['Feito'].astype(str)
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
         
-        st.cache_data.clear() # Limpa o cache
+        st.cache_data.clear()
         st.toast("✅ Salvo!", icon="☁️")
         return True
     except Exception as e:
@@ -279,7 +279,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v32.3 - Correção Final Layout")
+    st.caption("v32.4 - Importação Inteligente")
 
 # --- ROBÔ ---
 try:
@@ -383,7 +383,7 @@ elif menu == "Gestão de Docs":
     if f_stt: df_show = df_show[df_show['Status'].isin(f_stt)]
     if f_txt: df_show = df_show[df_show.astype(str).apply(lambda x: x.str.contains(f_txt, case=False)).any(axis=1)]
 
-    # --- CORREÇÃO AQUI: As colunas são criadas ANTES de serem usadas ---
+    # --- CRIAÇÃO DAS COLUNAS ---
     col_l, col_d = st.columns([1.2, 2])
 
     with col_l:
@@ -416,57 +416,87 @@ elif menu == "Gestão de Docs":
                     else:
                         st.error("Preencha Unidade, Documento e CNPJ para adicionar.")
 
-        # BLOCO DE IMPORTAÇÃO EM MASSA
+        # BLOCO DE IMPORTAÇÃO EM MASSA (COM PREVIEW)
         st.markdown("---")
         with st.expander("⬆️ Importar em Massa (Excel/CSV)"):
             import_file = st.file_uploader("Carregar arquivo (.xlsx ou .csv)", type=['xlsx', 'csv'], key="uploader_import_mass")
             
             if import_file:
                 # 1. Leitura do Arquivo e Tratamento
+                df_novo = pd.DataFrame()
+                erro_leitura = ""
+                
                 try:
+                    # Tenta ler como Excel primeiro
                     try:
                         df_novo = pd.read_excel(import_file)
                     except:
-                        df_novo = pd.read_csv(import_file, encoding='utf-8')
+                        # Se falhar, tenta ler como CSV com separadores comuns (ponto e vírgula é comum no Brasil)
+                        import_file.seek(0)
+                        try:
+                            df_novo = pd.read_csv(import_file, sep=';', encoding='latin-1')
+                        except:
+                            import_file.seek(0)
+                            df_novo = pd.read_csv(import_file, sep=',', encoding='utf-8')
                     
-                    # 2. Normalização
-                    colunas_base = ['Unidade', 'Setor', 'Documento', 'CNPJ']
-                    for col in colunas_base:
-                        if col not in df_novo.columns:
-                            df_novo[col] = ""
-                    
-                    df_novo = df_novo[colunas_base].astype(str)
-                    
-                    # 3. Preenchimento Default
-                    hoje = date.today()
-                    df_novo['Data_Recebimento'] = hoje
-                    df_novo['Vencimento'] = hoje
-                    df_novo['Status'] = "NORMAL"
-                    df_novo['Progresso'] = 0
-                    df_novo['Concluido'] = "False"
-                    
-                    df_novo = df_novo[df_novo['Documento'].astype(str).str.strip() != ""]
+                    if not df_novo.empty:
+                        # Normaliza nomes de colunas (remove espaços extras)
+                        df_novo.columns = df_novo.columns.str.strip()
+                        
+                        # 2. Verifica colunas e mostra PREVIEW
+                        colunas_base = ['Unidade', 'Setor', 'Documento', 'CNPJ']
+                        colunas_encontradas = [c for c in colunas_base if c in df_novo.columns]
+                        
+                        st.write("### 🔎 Pré-visualização dos Dados Encontrados:")
+                        st.dataframe(df_novo.head(5), use_container_width=True)
+                        
+                        colunas_faltantes = [c for c in colunas_base if c not in df_novo.columns]
+                        
+                        if colunas_faltantes:
+                            st.warning(f"⚠️ As seguintes colunas não foram encontradas automaticamente e serão criadas vazias: {', '.join(colunas_faltantes)}")
+                            st.info("Dica: Verifique se o cabeçalho do seu arquivo está escrito exatamente como: Unidade, Setor, Documento, CNPJ")
+                        
+                        # Botão de confirmação só aparece se leu algo
+                        if st.button(f"✅ Confirmar Importação de {len(df_novo)} Linhas", type="primary"):
+                            
+                            # Normalização
+                            for col in colunas_base:
+                                if col not in df_novo.columns:
+                                    df_novo[col] = ""
+                            
+                            df_novo = df_novo[colunas_base].astype(str)
+                            
+                            # 3. Preenchimento Default
+                            hoje = date.today()
+                            df_novo['Data_Recebimento'] = hoje
+                            df_novo['Vencimento'] = hoje
+                            df_novo['Status'] = "NORMAL"
+                            df_novo['Progresso'] = 0
+                            df_novo['Concluido'] = "False"
+                            
+                            # Limpeza de linhas vazias
+                            df_novo = df_novo[df_novo['Documento'].astype(str).str.strip() != ""]
+                            df_novo = df_novo[df_novo['Documento'].astype(str).str.strip() != "nan"]
 
-                    if st.button(f"Integrar {len(df_novo)} Documentos e Salvar na Nuvem", type="primary"):
-                        if df_novo.empty:
-                            st.warning("Arquivo sem dados válidos.")
-                        else:
-                            # 4. Integração (SEM GLOBAL)
-                            df_novo['ID_UNICO'] = df_novo['Unidade'].astype(str) + " - " + df_novo['Documento'].astype(str)
-                            
-                            # Cria dataframe combinado localmente
-                            df_combinado = pd.concat([df_prazos, df_novo], ignore_index=True)
-                            df_combinado = df_combinado.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
-                            
-                            # 5. Salva na Nuvem
-                            salvar_alteracoes_completo(df_combinado, df_checklist)
-                            st.success(f"✅ {len(df_novo)} documentos salvos!")
-                            st.balloons()
-                            time.sleep(1)
-                            st.rerun()
+                            if df_novo.empty:
+                                st.error("O arquivo não contém nomes de Documentos válidos na coluna 'Documento'.")
+                            else:
+                                # 4. Integração
+                                df_novo['ID_UNICO'] = df_novo['Unidade'].astype(str) + " - " + df_novo['Documento'].astype(str)
+                                
+                                # Cria dataframe combinado localmente
+                                df_combinado = pd.concat([df_prazos, df_novo], ignore_index=True)
+                                df_combinado = df_combinado.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
+                                
+                                # 5. Salva na Nuvem
+                                salvar_alteracoes_completo(df_combinado, df_checklist)
+                                st.success(f"✅ {len(df_novo)} documentos importados com sucesso!")
+                                st.balloons()
+                                time.sleep(2)
+                                st.rerun()
 
                 except Exception as e:
-                    st.error(f"Erro: {e}")
+                    st.error(f"Erro ao ler arquivo: {e}")
         # FIM DO BLOCO
         
     with col_d:
