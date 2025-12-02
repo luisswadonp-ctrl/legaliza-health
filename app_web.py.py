@@ -106,18 +106,18 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
 def processar_dados_importados(df_importado_raw):
     df = df_importado_raw.copy()
     
+    # Normalização dos nomes das colunas
     df.columns = [str(c).strip().replace('.', '').upper() for c in df.columns]
     
     col_map = {
         'Unidade': ['NOME DA UNIDADE', 'UNIDADE'],
         'CNPJ': ['CNPJ'],
         'Setor': ['SETOR FISCALIZADO', 'SETOR'],
-        'Documento_Nome': ['NOME DO DOCUMENTO', 'DOCUMENTO', 'TIPO DE DOCUMENTO', 'TAXA'],
-        'Documento_Detalhe': ['PROCESSO', 'MOTIVO DA FISCALIZAÇÃO', 'ITEM'],
+        'Documento_Nome': ['NOME DO DOCUMENTO', 'DOCUMENTO', 'TIPO DE DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO', 'PROCESSO'],
         'Vencimento': ['DATA LIMITE DE ATENDIMENTO', 'VENCIMENTO', 'SLA ESPERADO'],
         'Data_Recebimento': ['DATA DO DOCUMENTO/RECEBIDO PELA UNIDADE', 'DATA INÍCIO', 'DATA ENVIO PGTO'],
         'Status_Origem': ['STATUS DO PROCESSO', 'STATUS'],
-        'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO'],
+        'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO', 'OBSERVAÇÃO'], 
     }
     
     df_result = pd.DataFrame()
@@ -126,7 +126,7 @@ def processar_dados_importados(df_importado_raw):
     for col_final, col_candidatas in col_map.items():
         col_encontrada = next((c for c in col_candidatas if c in df.columns), None)
         
-        val = df[col_encontrada].astype(str).str.strip().fillna('') if col_encontrada else ''
+        val = df[col_encontrada].astype(str).str.strip().fillna('') if col_encontrada else pd.Series([''] * len(df))
 
         if 'Data' in col_final or 'Vencimento' in col_final:
             try: df_result[col_final] = pd.to_datetime(val, dayfirst=True, errors='coerce').dt.date.fillna(hoje)
@@ -134,41 +134,35 @@ def processar_dados_importados(df_importado_raw):
         else:
             df_result[col_final] = val
             
-    # Combina Nome do Documento Principal
-    doc_principal = df_result.get('Documento_Nome', pd.Series([''] * len(df_result)))
-    doc_detalhe = df_result.get('Documento_Detalhe', pd.Series([''] * len(df_result)))
-    
-    df_result['Documento'] = doc_principal.str.cat(doc_detalhe, sep=' - ', na_rep='').str.strip(' - ')
+    # Combinação e Limpeza de Documento
+    df_result['Documento'] = df_result.get('Documento_Nome', pd.Series([''] * len(df_result)))
     df_result['Documento'] = df_result['Documento'].apply(lambda x: x if x else 'Não Definido')
 
-    
     # Mapeamento de Status
-    status_map = {'CONCLUÍDO': 'NORMAL', 'QUITADO': 'NORMAL', 'EM ANDAMENTO': 'ALTO', 'PENDENTE': 'CRÍTICO', 'VENCIDO': 'CRÍTICO', 'EM PGTO': 'ALTO'}
+    status_map = {'CONCLUÍDO': 'NORMAL', 'QUITADO': 'NORMAL', 'EM ANDAMENTO': 'ALTO', 'PENDENTE': 'CRÍTICO', 'VENCIDO': 'CRÍTICO', 'EM PGTO': 'ALTO', 'NA': 'NORMAL'}
     df_result['Status'] = df_result.get('Status_Origem', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
     
     # Preenchimento de campos vazios com info amigável
     for col in ['Unidade', 'Setor', 'CNPJ', 'Comunicado']:
         if col in df_result.columns:
-            df_result[col] = df_result[col].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
+            df_result[col] = df_result[col].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado', 'NONE': 'Não Informado'})
             
+    # Limpa linhas sem Unidade ou Documento
     df_result = df_result[(df_result['Unidade'] != 'Não Informado') & (df_result['Documento'] != 'Não Definido')].reset_index(drop=True)
     
-    # Campos padrão
+    # Adiciona colunas padrão para o DB
     df_result['Progresso'] = 0
     df_result['Concluido'] = 'False'
     
     colunas_finais = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
-    
     df_final = pd.DataFrame()
     for col in colunas_finais:
         if col in df_result.columns:
             df_final[col] = df_result[col]
         else:
-            # Preenche colunas que faltam (ex: CNPJ se o arquivo for só de tarefas internas)
-            df_final[col] = df_result.get(col, pd.Series([''] * len(df_result))).replace({'': 'Não Informado'})
+            df_final[col] = ''
             
     return df_final.copy()
-
 
 # --- FUNÇÕES DE CONEXÃO E SALVAMENTO ---
 
@@ -346,7 +340,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v35.0 - Estabilidade Final")
+    st.caption("v35.0 - Final Bugfix")
 
 # --- ROBÔ ---
 try:
@@ -402,7 +396,7 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # 1. TABELA DE ALERTA
+    # 1. TABELA DE ALERTA (Prioridade no Mobile)
     f_atual = st.session_state['filtro_dash']
     st.subheader(f"Lista de Processos: {f_atual}")
     df_show = df_p.copy()
@@ -478,6 +472,7 @@ elif menu == "Gestão de Docs":
         with st.expander("⬆️ Importação em Massa"):
             with st.form("import_docs", clear_on_submit=True):
                 uploaded_file = st.file_uploader("Selecione o arquivo (CSV/Excel)", type=['csv', 'xlsx'])
+                # Removida seleção de tipo base, agora é automático
                 
                 if st.form_submit_button("IMPORTAR E VALIDAR", type="secondary"):
                     if uploaded_file is not None:
@@ -490,7 +485,6 @@ elif menu == "Gestão de Docs":
                                 
                             st.toast("Arquivo lido com sucesso!")
                             
-                            # CHAMA PROCESSAMENTO AUTÔNOMO
                             df_novos_docs = processar_dados_importados(df_novo_raw)
                             
                             if not df_novos_docs.empty:
