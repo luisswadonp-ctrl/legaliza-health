@@ -31,24 +31,66 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_CHECK_ROBO = 60
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
-# --- 2. CÉREBRO DE INTELIGÊNCIA (BASE DE CONHECIMENTO) ---
-# Aqui definimos as regras padrão para cada tipo de documento.
-# Validade em dias (0 = indefinido/variável), Risco Padrão.
+# --- 2. CÉREBRO DE INTELIGÊNCIA (BASE DE CONHECIMENTO + TAREFAS) ---
 DOC_INTELLIGENCE = {
-    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura"},
-    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+anvisa"},
-    "Corpo de Bombeiros": {"dias": 1095, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+avcb+bombeiros"}, # 3 anos comum em alguns lugares
-    "Conselho de Medicina (CRM)": {"dias": 365, "risco": "ALTO", "link": "https://portal.cfm.org.br/busca-medicos/"},
-    "Conselho de Enfermagem (COREN)": {"dias": 365, "risco": "ALTO", "link": "http://www.cofen.gov.br/"},
-    "Conselho de Farmácia (CRF)": {"dias": 365, "risco": "ALTO", "link": "https://www.cff.org.br/"},
-    "CNES": {"dias": 180, "risco": "CRÍTICO", "link": "https://cnes.datasus.gov.br/"},
-    "Licença Ambiental": {"dias": 1460, "risco": "MÉDIO", "link": "https://www.google.com/search?q=licenca+ambiental+consulta"}, # 4 anos
-    "Polícia Civil (Licença)": {"dias": 365, "risco": "ALTO", "link": "https://www.google.com/search?q=policia+civil+produtos+controlados"},
-    "Polícia Federal (Licença)": {"dias": 365, "risco": "ALTO", "link": "https://www.gov.br/pf/pt-br"},
-    "Licença de Publicidade": {"dias": 365, "risco": "NORMAL", "link": ""},
+    "Alvará de Funcionamento": {
+        "dias": 365, "risco": "CRÍTICO", 
+        "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura",
+        "tarefas": ["Solicitar renovação na Prefeitura", "Verificar pagamento da taxa", "Afixar original na recepção", "Digitalizar cópia para o drive"]
+    },
+    "Licença Sanitária": {
+        "dias": 365, "risco": "CRÍTICO", 
+        "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+anvisa",
+        "tarefas": ["Protocolar pedido na Vigilância Sanitária", "Revisar Manual de Boas Práticas", "Verificar dedetização semestral", "Limpeza da caixa d'água", "Acompanhar inspeção"]
+    },
+    "Corpo de Bombeiros": {
+        "dias": 1095, "risco": "CRÍTICO", 
+        "link": "https://www.google.com/search?q=consulta+avcb+bombeiros",
+        "tarefas": ["Verificar validade dos extintores", "Teste de mangueiras e hidrantes", "Sinalização de saída de emergência", "Treinamento da Brigada de Incêndio", "ART do sistema de gás"]
+    },
+    "Conselho de Medicina (CRM)": {
+        "dias": 365, "risco": "ALTO", 
+        "link": "https://portal.cfm.org.br/busca-medicos/",
+        "tarefas": ["Atualizar lista de corpo clínico", "Verificar anuidade do Diretor Técnico", "Enviar alteração contratual (se houver)", "Pagar taxa de renovação PJ"]
+    },
+    "Conselho de Enfermagem (COREN)": {
+        "dias": 365, "risco": "ALTO", 
+        "link": "http://www.cofen.gov.br/",
+        "tarefas": ["Atualizar Certidão de Responsabilidade Técnica (CRT)", "Verificar dimensionamento de pessoal", "Escala de enfermeiros atualizada"]
+    },
+    "Conselho de Farmácia (CRF)": {
+        "dias": 365, "risco": "ALTO", 
+        "link": "https://www.cff.org.br/",
+        "tarefas": ["Renovar Certidão de Regularidade", "Verificar presença do farmacêutico no horário integral", "Controle de temperatura da geladeira"]
+    },
+    "CNES": {
+        "dias": 180, "risco": "CRÍTICO", 
+        "link": "https://cnes.datasus.gov.br/",
+        "tarefas": ["Atualizar cadastro no site do DATASUS", "Verificar equipamentos cadastrados", "Atualizar profissionais desligados/admitidos"]
+    },
+    "Licença Ambiental": {
+        "dias": 1460, "risco": "MÉDIO", 
+        "link": "https://www.google.com/search?q=licenca+ambiental+consulta",
+        "tarefas": ["Verificar manifesto de resíduos (MTR)", "Plano de Gerenciamento de Resíduos (PGRSS)", "Renovação da licença de operação"]
+    },
+    "Polícia Civil (Licença)": {
+        "dias": 365, "risco": "ALTO", 
+        "link": "https://www.google.com/search?q=policia+civil+produtos+controlados",
+        "tarefas": ["Relatório trimestral de produtos controlados", "Vistoria do local de armazenamento", "Pagar taxa de fiscalização"]
+    },
+    "Polícia Federal (Licença)": {
+        "dias": 365, "risco": "ALTO", 
+        "link": "https://www.gov.br/pf/pt-br",
+        "tarefas": ["Enviar mapas mensais de produtos quimicos", "Renovar Certificado de Registro Cadastral", "Verificar validade da Licença de Funcionamento"]
+    },
+    "Licença de Publicidade": {
+        "dias": 365, "risco": "NORMAL", 
+        "link": "",
+        "tarefas": ["Verificar medidas da fachada", "Pagar taxa de publicidade (TFE/TFA)"]
+    },
 }
 
-# Lista completa para o dropdown (mantendo a sua lista original)
+# Lista completa para o dropdown
 LISTA_TIPOS_DOCUMENTOS = sorted(list(set([
     "Licença de Publicidade", "Conselho de Medicina (CRM)", "Conselho de Farmácia (CRF)", "Licença Sanitária",
     "Conselho de Enfermagem (COREN)", "CNES", "Inscrição Municipal", "Licença Ambiental", "Alvará de Funcionamento",
@@ -106,7 +148,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES AUXILIARES ---
+# --- FUNÇÕES ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -123,16 +165,25 @@ def normalizar_texto(texto):
     if texto is None: return ""
     return ''.join(c for c in unicodedata.normalize('NFKD', str(texto)) if unicodedata.category(c) != 'Mn').lower()
 
-# --- FUNÇÃO INTELIGENTE PARA APLICAR REGRAS ---
 def aplicar_inteligencia_doc(tipo_doc, data_base=None):
     if not data_base: data_base = date.today()
-    info = DOC_INTELLIGENCE.get(tipo_doc, {"dias": 0, "risco": "NORMAL", "link": ""})
+    info = DOC_INTELLIGENCE.get(tipo_doc, {"dias": 0, "risco": "NORMAL", "link": "", "tarefas": []})
     
     novo_vencimento = data_base
     if info["dias"] > 0:
         novo_vencimento = data_base + timedelta(days=info["dias"])
         
-    return info["risco"], novo_vencimento, info["link"]
+    return info["risco"], novo_vencimento, info["link"], info["tarefas"]
+
+# FUNÇÃO PARA ADICIONAR TAREFAS SUGERIDAS AO CHECKLIST
+def adicionar_tarefas_sugeridas(df_checklist, id_doc, tarefas):
+    novas = []
+    for t in tarefas:
+        novas.append({"Documento_Ref": id_doc, "Tarefa": t, "Feito": False})
+    
+    if novas:
+        return pd.concat([df_checklist, pd.DataFrame(novas)], ignore_index=True)
+    return df_checklist
 
 st.markdown("""
 <style>
@@ -360,7 +411,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v39.0 - Sistema Inteligente")
+    st.caption("v40.0 - Checklist Automático")
 
 # --- ROBÔ INTELIGENTE V2 ---
 try:
@@ -516,13 +567,18 @@ elif menu == "Gestão de Docs":
                 if st.form_submit_button("ADICIONAR"):
                     if n_u and n_d and n_c:
                         # APLICA INTELIGÊNCIA AO CRIAR
-                        risco_sug, venc_sug, link_sug = aplicar_inteligencia_doc(n_d)
+                        risco_sug, venc_sug, link_sug, tarefas_sug = aplicar_inteligencia_doc(n_d)
                         
                         novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": venc_sug, "Status": risco_sug, "Progresso": 0, "Concluido": "False"}
                         df_temp = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
                         df_temp['ID_UNICO'] = df_temp['Unidade'] + " - " + df_temp['Documento']
+                        
+                        # --- ADICIONA TAREFAS SUGERIDAS AUTOMATICAMENTE ---
+                        if tarefas_sug:
+                            df_checklist = adicionar_tarefas_sugeridas(df_checklist, df_temp['ID_UNICO'].iloc[0], tarefas_sug)
+                        
                         update_dados_local(df_temp, df_checklist)
-                        st.toast(f"Criado! Risco definido como {risco_sug}.", icon="🧠")
+                        st.toast(f"Criado! Checklist sugerido carregado.", icon="✅")
                         st.rerun()
                     else:
                         st.error("Preencha Unidade, Documento e CNPJ para adicionar.")
@@ -615,11 +671,10 @@ elif menu == "Gestão de Docs":
                         cnpj_atual = df_prazos.at[idx, 'CNPJ']
                         
                         # --- APLICA INTELIGÊNCIA AO MUDAR O NOME ---
-                        risco_sug, venc_sug, link_sug = aplicar_inteligencia_doc(novo_nome_doc, df_prazos.at[idx, 'Data_Recebimento'])
+                        risco_sug, venc_sug, link_sug, tarefas_sug = aplicar_inteligencia_doc(novo_nome_doc, df_prazos.at[idx, 'Data_Recebimento'])
                         df_prazos.at[idx, 'Status'] = risco_sug
                         df_prazos.at[idx, 'Vencimento'] = venc_sug
                         
-                        # Atualiza IDs
                         novo_id = nova_unidade + " - " + cnpj_atual + " - " + novo_nome_doc
                         df_prazos.at[idx, 'Documento'] = novo_nome_doc
                         df_prazos.at[idx, 'ID_UNICO'] = novo_id
@@ -633,7 +688,7 @@ elif menu == "Gestão de Docs":
                 st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
                 
                 # --- LINK INTELIGENTE ---
-                _, _, link_inteligente = aplicar_inteligencia_doc(doc_nome)
+                _, _, link_inteligente, tarefas_inteligentes = aplicar_inteligencia_doc(doc_nome)
                 if link_inteligente:
                     st.link_button(f"🌎 Pesquisar {doc_nome} no Google", link_inteligente)
                 
@@ -683,13 +738,20 @@ elif menu == "Gestão de Docs":
                     prog_bar_placeholder = st.empty()
                     prog_bar_placeholder.progress(prog_atual, text=f"Progressão: {prog_atual}%")
 
-                st.write("✅ **Tarefas (Edição Rápida)**")
+                st.write("✅ **Tarefas**")
+                
+                # --- BOTÃO PARA CARREGAR TAREFAS SUGERIDAS (SE LISTA VAZIA) ---
                 df_checklist['Feito'] = df_checklist['Feito'].replace({'TRUE': True, 'FALSE': False, 'True': True, 'False': False, 'nan': False})
                 df_checklist['Feito'] = df_checklist['Feito'].fillna(False).astype(bool)
-                
                 df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
                 mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
                 df_t = df_checklist[mask].copy().reset_index(drop=True)
+                
+                if df_t.empty and tarefas_inteligentes:
+                    if st.button("📥 Carregar Checklist Sugerido", key=f"load_tasks_{doc_ativo_id}"):
+                        df_checklist = adicionar_tarefas_sugeridas(df_checklist, doc_ativo_id, tarefas_inteligentes)
+                        update_dados_local(df_prazos, df_checklist)
+                        st.rerun()
                 
                 c_add, c_btn = st.columns([3, 1])
                 new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
