@@ -169,7 +169,7 @@ LISTA_TIPOS_DOCUMENTOS = [
     "Alvará de Obra",
     "Outros"
 ]
-LISTA_TIPOS_DOCUMENTOS = sorted(list(set(LISTA_TIPOS_DOCUMENTOS))) # Remove duplicatas e ordena
+LISTA_TIPOS_DOCUMENTOS = sorted(list(set(LISTA_TIPOS_DOCUMENTOS)))
 
 # --- AUTO-REFRESH ---
 components.html("""
@@ -426,7 +426,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v34.0 - Importação Fixa + Lista Docs")
+    st.caption("v35.0 - Com Exclusão Total")
 
 # --- ROBÔ ---
 try:
@@ -574,7 +574,6 @@ elif menu == "Gestão de Docs":
                     
                     if not df_novo.empty:
                         df_novo.columns = df_novo.columns.str.strip()
-                        # CORREÇÃO: Mapeia Nome da unidade -> Unidade e CNPJ -> CNPJ. Documento vira PENDENTE.
                         if 'Nome da unidade' in df_novo.columns and 'CNPJ' in df_novo.columns:
                             df_import = df_novo[['Nome da unidade', 'CNPJ']].copy()
                             df_import = df_import.rename(columns={'Nome da unidade': 'Unidade'})
@@ -584,7 +583,7 @@ elif menu == "Gestão de Docs":
                             
                             if st.button(f"✅ Confirmar Importação", type="primary"):
                                 df_import['Setor'] = ""
-                                df_import['Documento'] = "⚠️ SELECIONE O TIPO" # Placeholder
+                                df_import['Documento'] = "⚠️ SELECIONE O TIPO"
                                 df_import['Data_Recebimento'] = date.today()
                                 df_import['Vencimento'] = date.today()
                                 df_import['Status'] = "NORMAL"
@@ -592,7 +591,7 @@ elif menu == "Gestão de Docs":
                                 df_import['Concluido'] = "False"
                                 df_import['Unidade'] = df_import['Unidade'].astype(str)
                                 df_import['CNPJ'] = df_import['CNPJ'].astype(str)
-                                df_import['ID_UNICO'] = df_import['Unidade'] + " - " + df_import['CNPJ'] + " - " + df_import['Documento'] # ID temporário unico
+                                df_import['ID_UNICO'] = df_import['Unidade'] + " - " + df_import['CNPJ'] + " - " + df_import['Documento']
                                 
                                 df_combinado = pd.concat([df_prazos, df_import], ignore_index=True)
                                 df_combinado = df_combinado.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
@@ -604,6 +603,26 @@ elif menu == "Gestão de Docs":
                                 st.rerun()
                         else: st.error(f"Necessário colunas 'Nome da unidade' e 'CNPJ'.")
                 except Exception as e: st.error(f"Erro: {e}")
+
+        # --- ZONA DE PERIGO (EXCLUIR TUDO) ---
+        st.markdown("---")
+        with st.expander("🗑️ ZONA DE PERIGO (Excluir Tudo)"):
+            st.warning("Atenção: Isso apagará TODOS os documentos e tarefas.")
+            confirm = st.checkbox("Sim, quero excluir tudo")
+            if confirm:
+                if st.button("❌ EXCLUIR TODA A LISTA", type="primary"):
+                    # Create empty DFs
+                    df_prazos = pd.DataFrame(columns=["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "ID_UNICO"])
+                    df_checklist = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+
+                    # Save to cloud
+                    salvar_alteracoes_completo(df_prazos, df_checklist)
+
+                    # Clear session
+                    st.session_state['doc_focado_id'] = None
+                    st.success("Tudo excluído!")
+                    time.sleep(1)
+                    st.rerun()
         
     with col_d:
         if doc_ativo_id:
@@ -616,10 +635,9 @@ elif menu == "Gestão de Docs":
                 # --- EDIÇÃO DO TIPO DO DOCUMENTO (LISTA DROPDOWN) ---
                 c_tit, c_edit_btn = st.columns([4, 1])
                 
-                # Garante que o valor atual esteja na lista para não dar erro
                 opcoes_docs = LISTA_TIPOS_DOCUMENTOS.copy()
                 if doc_nome not in opcoes_docs:
-                    opcoes_docs.insert(0, doc_nome) # Adiciona temporariamente se for um nome antigo ou customizado
+                    opcoes_docs.insert(0, doc_nome) 
                 
                 try: idx_atual = opcoes_docs.index(doc_nome)
                 except: idx_atual = 0
@@ -630,7 +648,6 @@ elif menu == "Gestão de Docs":
                      if c_edit_btn.button("Salvar Tipo"):
                         antigo_id = doc_ativo_id
                         nova_unidade = df_prazos.at[idx, 'Unidade']
-                        # Recria ID baseado no novo nome
                         novo_id = nova_unidade + " - " + novo_nome_doc
                         
                         df_prazos.at[idx, 'Documento'] = novo_nome_doc
