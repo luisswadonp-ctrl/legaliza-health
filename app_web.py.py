@@ -8,6 +8,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import base64
 import requests
+import streamlit.components.v1 as components
 
 # --- 1. CONFIGURAÇÃO VISUAL ---
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
@@ -15,10 +16,22 @@ st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wi
 # SEU CANAL SECRETO DO NTFY
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 
-# --- CONFIGURAÇÃO DOS INTERVALOS DE NOTIFICAÇÃO (EM MINUTOS) ---
-INTERVALO_ATRASADO = 10  # A cada 10 minutos
-INTERVALO_HOJE = 30      # A cada 30 minutos
-INTERVALO_CRITICO = 60   # A cada 1 hora
+# --- INTERVALOS DE NOTIFICAÇÃO (EM MINUTOS) ---
+# O sistema só mandará mensagem de novo se já tiver passado esse tempo
+INTERVALO_ATRASADO = 20  
+INTERVALO_HOJE = 60      
+INTERVALO_CRITICO = 120   
+
+# --- AUTO-REFRESH (O SEGREDO PARA NÃO TRAVAR) ---
+# Isso recarrega a página a cada 60 segundos automaticamente
+refresh_code = """
+<script>
+    setTimeout(function(){
+        window.location.reload(1);
+    }, 60000);
+</script>
+"""
+components.html(refresh_code, height=0)
 
 # Função para carregar imagem
 def get_img_as_base64(file):
@@ -31,32 +44,22 @@ def get_img_as_base64(file):
 
 img_loading = get_img_as_base64("loading.gif")
 
-# CSS (Design Tecnológico)
+# CSS (Dark Mode Ajustado)
 st.markdown(f"""
 <style>
     .stApp {{ background-color: #0e1117; color: #e0e0e0; }}
-    
-    /* Métricas */
     div[data-testid="metric-container"] {{
-        background-color: #1f2937; 
-        border: 1px solid #374151;
+        background-color: #1f2937; border: 1px solid #374151;
         padding: 15px; border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }}
-    
-    /* Botões */
     .stButton>button {{
         border-radius: 8px; font-weight: bold; text-transform: uppercase;
         background-image: linear-gradient(to right, #2563eb, #1d4ed8);
         border: none; color: white;
     }}
-    
-    /* Status Animado */
-    @keyframes pulse {{
-        0% {{ opacity: 1; }} 50% {{ opacity: 0.5; }} 100% {{ opacity: 1; }}
-    }}
-    .monitor-ativo {{
-        color: #00e676; font-weight: bold; animation: pulse 2s infinite;
+    /* Status Labels */
+    .status-badge {{
+        padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.9em;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -73,26 +76,19 @@ def conectar_gsheets():
 def enviar_notificacao_push(documento, data_venc, dias_restantes, status):
     """Envia notificação inteligente"""
     
-    # Define urgência e ícones
     if dias_restantes < 0:
-        prio = "urgent"
-        tags = "rotating_light,skull"
-        titulo = f"⛔ ATRASADO: {documento}"
-        intervalo = INTERVALO_ATRASADO
+        prio = "urgent"; tags = "rotating_light,skull"; titulo = f"⛔ ATRASADO: {documento}"
     elif dias_restantes == 0:
-        prio = "high"
-        tags = "boom,clock4"
-        titulo = f"💥 VENCE HOJE: {documento}"
-        intervalo = INTERVALO_HOJE
-    elif dias_restantes <= 3:
-        prio = "high"
-        tags = "warning"
-        titulo = f"🚨 URGENTE ({dias_restantes}d): {documento}"
-        intervalo = INTERVALO_CRITICO
+        prio = "high"; tags = "boom,clock4"; titulo = f"💥 VENCE HOJE: {documento}"
+    elif dias_restantes <= 7:
+        prio = "high"; tags = "warning"; titulo = f"🚨 URGENTE ({dias_restantes}d): {documento}"
     else:
-        return False # Não notifica se estiver longe
+        return False 
 
-    mensagem = f"Prazo: {data_venc}\nStatus: {status}\n(Alerta repetirá em {intervalo}min)"
+    # Converte data para string se não for
+    data_str = str(data_venc)
+    
+    mensagem = f"Prazo: {data_str}\nStatus: {status}\nVerifique o app!"
 
     try:
         requests.post(
@@ -111,7 +107,9 @@ def sincronizar_prazos_completo(df_novo):
         ws.clear()
         df_salvar = df_novo.copy()
         df_salvar['Concluido'] = df_salvar['Concluido'].astype(str)
-        df_salvar['Vencimento'] = df_salvar['Vencimento'].astype(str)
+        # Garante que NaT vire string vazia ou texto
+        df_salvar['Vencimento'] = df_salvar['Vencimento'].astype(str).replace("NaT", "")
+        
         lista_dados = [df_salvar.columns.values.tolist()] + df_salvar.values.tolist()
         ws.update(lista_dados)
         st.toast("✅ Salvo na nuvem!", icon="☁️")
@@ -137,7 +135,10 @@ def carregar_dados_prazos():
         dados = ws.get_all_records()
         df = pd.DataFrame(dados)
         if "Concluido" not in df.columns: df["Concluido"] = "False"
+        
+        # Tratamento Robusto de Datas (CORREÇÃO DO NaT)
         df['Vencimento'] = pd.to_datetime(df['Vencimento'], dayfirst=True, errors='coerce').dt.date
+        
         df['Concluido'] = df['Concluido'].astype(str).str.upper() == 'TRUE'
         return df
     except:
@@ -145,16 +146,19 @@ def carregar_dados_prazos():
 
 def calcular_status(data_venc, concluido):
     if concluido: return 999, "✅ RESOLVIDO"
-    if pd.isnull(data_venc): return 0, "⚪ ERRO"
+    
+    # Se a data for inválida (NaT), retorna erro amigável
+    if pd.isnull(data_venc): return 0, "⚪ DATA INVÁLIDA"
     
     hoje = date.today()
     dias = (data_venc - hoje).days
     
+    # NOVAS REGRAS DE PRAZO
     if dias < 0: return dias, "⛔ ATRASADO"
     elif dias == 0: return dias, "💥 VENCE HOJE"
-    elif dias <= 3: return dias, "🔴 CRÍTICO"
-    elif dias <= 15: return dias, "🟠 ALTA"
-    else: return dias, "🟢 NORMAL"
+    elif dias <= 7: return dias, "🔴 CRÍTICO" # Até 7 dias
+    elif dias <= 10: return dias, "🟠 ALTO"   # Até 10 dias
+    else: return dias, "🟢 NORMAL"            # Acima de 10 dias
 
 # --- PDF GENERATOR ---
 class PDF(FPDF):
@@ -180,12 +184,12 @@ def gerar_pdf(vistorias):
         pdf.ln(5)
     return bytes(pdf.output(dest='S'))
 
-# --- INTERFACE ---
+# --- INTERFACE PRINCIPAL ---
 
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
-# Dicionário para controlar quando foi a última notificação de cada item
 if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notificacao'] = {}
 
+# Sidebar
 with st.sidebar:
     if img_loading:
         st.markdown(f'<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px; margin-bottom:15px;"></div>', unsafe_allow_html=True)
@@ -193,38 +197,30 @@ with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=80)
     
     st.markdown("### LegalizaHealth Pro")
+    st.caption(f"Atualização Automática: 60s")
     menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Prazos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
-    
-    # --- ROBÔ DE MONITORAMENTO ---
-    st.markdown("### 🤖 Robô de Alertas")
-    monitorar = st.toggle("Ativar Monitoramento em Tempo Real", value=False)
-    
-    status_placeholder = st.empty()
 
-# --- LÓGICA DO ROBÔ (Executa se o toggle estiver ligado) ---
-if monitorar:
-    status_placeholder.markdown('<span class="monitor-ativo">● Monitorando...</span>', unsafe_allow_html=True)
-    
-    # Carrega dados sem mostrar na tela
+# --- ROBÔ SILENCIOSO (RODA SEMPRE NO TOPO) ---
+# Ele carrega os dados e verifica se precisa notificar
+try:
     df_robo = carregar_dados_prazos()
     agora = datetime.now()
     
     for index, row in df_robo.iterrows():
-        if not row['Concluido']: # Só verifica se não estiver pronto
+        if not row['Concluido']:
             dias, status = calcular_status(row['Vencimento'], False)
             
-            # Define intervalo baseado na urgência
+            # Define intervalo
             intervalo_minutos = None
             if dias < 0: intervalo_minutos = INTERVALO_ATRASADO
             elif dias == 0: intervalo_minutos = INTERVALO_HOJE
-            elif dias <= 3: intervalo_minutos = INTERVALO_CRITICO
+            elif dias <= 7: intervalo_minutos = INTERVALO_CRITICO
             
             if intervalo_minutos:
                 chave_doc = row['Documento']
                 ultima_vez = st.session_state['ultima_notificacao'].get(chave_doc)
                 
-                # Se nunca mandou OU se já passou o tempo do intervalo
                 mandar_agora = False
                 if ultima_vez is None:
                     mandar_agora = True
@@ -234,54 +230,70 @@ if monitorar:
                         mandar_agora = True
                 
                 if mandar_agora:
-                    sucesso = enviar_notificacao_push(row['Documento'], str(row['Vencimento']), dias, status)
+                    # Tenta converter a data para string segura antes de enviar
+                    data_segura = str(row['Vencimento']) if not pd.isnull(row['Vencimento']) else "Data Inválida"
+                    sucesso = enviar_notificacao_push(row['Documento'], data_segura, dias, status)
                     if sucesso:
                         st.session_state['ultima_notificacao'][chave_doc] = agora
-                        st.toast(f"🤖 Alerta enviado: {row['Documento']}")
-    
-    # Faz o script rodar de novo a cada 30 segundos para checar novamente
-    time.sleep(30)
-    st.rerun()
+                        st.toast(f"🤖 Alerta Auto: {row['Documento']}")
+except Exception as e:
+    # Se der erro no robô, não trava o site, apenas mostra um aviso pequeno
+    print(f"Erro robô: {e}")
 
 # --- 1. DASHBOARD ---
 if menu == "📊 Dashboard":
     st.title("Painel de Controle")
-    if not monitorar:
-        with st.spinner('Atualizando...'): time.sleep(0.3)
     
-    df = carregar_dados_prazos()
+    # Usa os dados já carregados pelo robô
+    df = df_robo 
     
     criticos_lista = []
     atencao_lista = []
     
+    # Cria coluna formatada
+    df['Prazo_Txt'] = ""
+
     for index, row in df.iterrows():
         d, s = calcular_status(row['Vencimento'], row['Concluido'])
         df.at[index, 'Status'] = s
         
+        # Correção do NaT na exibição
+        if s == "⚪ DATA INVÁLIDA":
+            df.at[index, 'Prazo_Txt'] = "---"
+        elif d < 0: df.at[index, 'Prazo_Txt'] = f"🚨 {abs(d)} dias ATRASO"
+        elif d == 0: df.at[index, 'Prazo_Txt'] = "💥 VENCE HOJE"
+        else: df.at[index, 'Prazo_Txt'] = f"{d} dias restantes"
+        
         if not row['Concluido']:
             if "CRÍTICO" in s or "ATRASADO" in s or "VENCE HOJE" in s: criticos_lista.append(row)
-            if "ALTA" in s: atencao_lista.append(row)
+            if "ALTO" in s: atencao_lista.append(row)
 
     n_criticos = len(criticos_lista)
     n_atencao = len(atencao_lista)
 
     c1, c2, c3 = st.columns(3)
     c1.metric("🚨 Risco Imediato", n_criticos, delta="Ação Necessária" if n_criticos > 0 else "OK", delta_color="inverse")
-    c2.metric("🟠 Atenção", n_atencao, delta_color="off")
+    c2.metric("🟠 Prioridade Alta", n_atencao, delta_color="off")
     c3.metric("📋 Total", len(df))
 
     st.markdown("---")
     
     if n_criticos > 0:
-        st.error(f"⚠️ Atenção! {n_criticos} documentos requerem sua ação.")
+        st.error(f"⚠️ Existem {n_criticos} itens pendentes com risco!")
         df_criticos = pd.DataFrame(criticos_lista)
-        st.dataframe(df_criticos[['Documento', 'Vencimento', 'Status']], use_container_width=True, hide_index=True)
+        # Mostra a coluna formatada bonita
+        st.dataframe(
+            df_criticos[['Documento', 'Vencimento', 'Prazo_Txt', 'Status']], 
+            use_container_width=True, 
+            hide_index=True
+        )
     else:
         st.success("Tudo tranquilo por enquanto.")
 
 # --- 2. GESTÃO DE PRAZOS ---
 elif menu == "📅 Gestão de Prazos":
     st.title("Gestão de Documentos")
+    st.caption("Datas inválidas aparecerão como 'NaT' ou vazias. Corrija clicando nelas.")
     
     if 'df_prazos' not in st.session_state: st.session_state['df_prazos'] = carregar_dados_prazos()
     df_editavel = st.session_state['df_prazos']
@@ -299,13 +311,14 @@ elif menu == "📅 Gestão de Prazos":
         key="editor_prazos"
     )
 
-    if st.button("💾 SALVAR ALTERAÇÕES", type="primary", use_container_width=True):
+    if st.button("💾 SALVAR E ATUALIZAR", type="primary", use_container_width=True):
         for index, row in df_alterado.iterrows():
             d, s = calcular_status(row['Vencimento'], row['Concluido'])
             df_alterado.at[index, 'Status'] = s
         
         if sincronizar_prazos_completo(df_alterado):
             st.session_state['df_prazos'] = df_alterado
+            st.success("✅ Atualizado!")
 
 # --- 3. VISTORIA ---
 elif menu == "📸 Nova Vistoria":
