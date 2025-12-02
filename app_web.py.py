@@ -15,6 +15,7 @@ import pytz
 import io
 from streamlit_option_menu import option_menu 
 import openpyxl 
+
 # Tenta importar Plotly
 try:
     import plotly.express as px
@@ -101,30 +102,27 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
-# --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS ---
+# --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS (AUTÔNOMO) ---
 def processar_dados_importados(df_importado_raw):
-    """Mapeia o DataFrame importado (CSV/Excel) para o formato do df_prazos."""
     df = df_importado_raw.copy()
     
-    # Normalização dos nomes das colunas
     df.columns = [str(c).strip().replace('.', '').upper() for c in df.columns]
     
-    # Mapeamento de Colunas (Candidatos)
     col_map = {
         'Unidade': ['NOME DA UNIDADE', 'UNIDADE'],
         'CNPJ': ['CNPJ'],
         'Setor': ['SETOR FISCALIZADO', 'SETOR'],
-        'Documento': ['TIPO DE DOCUMENTO', 'NOME DO DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO', 'PROCESSO'],
+        'Documento_Nome': ['NOME DO DOCUMENTO', 'DOCUMENTO', 'TIPO DE DOCUMENTO', 'TAXA'],
+        'Documento_Detalhe': ['PROCESSO', 'MOTIVO DA FISCALIZAÇÃO', 'ITEM'],
         'Vencimento': ['DATA LIMITE DE ATENDIMENTO', 'VENCIMENTO', 'SLA ESPERADO'],
         'Data_Recebimento': ['DATA DO DOCUMENTO/RECEBIDO PELA UNIDADE', 'DATA INÍCIO', 'DATA ENVIO PGTO'],
-        'Status': ['STATUS DO PROCESSO', 'STATUS'],
+        'Status_Origem': ['STATUS DO PROCESSO', 'STATUS'],
         'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO'],
     }
     
     df_result = pd.DataFrame()
     hoje = date.today()
 
-    # Mapeamento de Colunas
     for col_final, col_candidatas in col_map.items():
         col_encontrada = next((c for c in col_candidatas if c in df.columns), None)
         
@@ -136,18 +134,23 @@ def processar_dados_importados(df_importado_raw):
         else:
             df_result[col_final] = val
             
-    # Limpa Documento e Status
+    # Combina Nome do Documento Principal
+    doc_principal = df_result.get('Documento_Nome', pd.Series([''] * len(df_result)))
+    doc_detalhe = df_result.get('Documento_Detalhe', pd.Series([''] * len(df_result)))
+    
+    df_result['Documento'] = doc_principal.str.cat(doc_detalhe, sep=' - ', na_rep='').str.strip(' - ')
     df_result['Documento'] = df_result['Documento'].apply(lambda x: x if x else 'Não Definido')
+
     
+    # Mapeamento de Status
     status_map = {'CONCLUÍDO': 'NORMAL', 'QUITADO': 'NORMAL', 'EM ANDAMENTO': 'ALTO', 'PENDENTE': 'CRÍTICO', 'VENCIDO': 'CRÍTICO', 'EM PGTO': 'ALTO'}
-    df_result['Status'] = df_result.get('Status', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
+    df_result['Status'] = df_result.get('Status_Origem', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
     
-    # Preenchimento de campos vazios com info amigável (Conforme solicitado)
+    # Preenchimento de campos vazios com info amigável
     for col in ['Unidade', 'Setor', 'CNPJ', 'Comunicado']:
         if col in df_result.columns:
             df_result[col] = df_result[col].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
             
-    # Limpa linhas sem Unidade ou Documento
     df_result = df_result[(df_result['Unidade'] != 'Não Informado') & (df_result['Documento'] != 'Não Definido')].reset_index(drop=True)
     
     # Campos padrão
@@ -155,10 +158,17 @@ def processar_dados_importados(df_importado_raw):
     df_result['Concluido'] = 'False'
     
     colunas_finais = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
+    
+    df_final = pd.DataFrame()
     for col in colunas_finais:
-        if col not in df_result.columns: df_result[col] = ''
+        if col in df_result.columns:
+            df_final[col] = df_result[col]
+        else:
+            # Preenche colunas que faltam (ex: CNPJ se o arquivo for só de tarefas internas)
+            df_final[col] = df_result.get(col, pd.Series([''] * len(df_result))).replace({'': 'Não Informado'})
             
-    return df_result[colunas_finais].copy()
+    return df_final.copy()
+
 
 # --- FUNÇÕES DE CONEXÃO E SALVAMENTO ---
 
@@ -468,9 +478,6 @@ elif menu == "Gestão de Docs":
         with st.expander("⬆️ Importação em Massa"):
             with st.form("import_docs", clear_on_submit=True):
                 uploaded_file = st.file_uploader("Selecione o arquivo (CSV/Excel)", type=['csv', 'xlsx'])
-                tipo_import = st.selectbox("Categoria Principal do Documento:", 
-                                            ["COMUNIQUE-SE/NOTIFICAÇÃO", "PROCESSO EM ANDAMENTO", "TAXA", "OUTROS"], 
-                                            key="tipo_import_cat")
                 
                 if st.form_submit_button("IMPORTAR E VALIDAR", type="secondary"):
                     if uploaded_file is not None:
@@ -483,7 +490,8 @@ elif menu == "Gestão de Docs":
                                 
                             st.toast("Arquivo lido com sucesso!")
                             
-                            df_novos_docs = processar_dados_importados(df_novo_raw, tipo_import)
+                            # CHAMA PROCESSAMENTO AUTÔNOMO
+                            df_novos_docs = processar_dados_importados(df_novo_raw)
                             
                             if not df_novos_docs.empty:
                                 st.session_state['df_import_preview'] = df_novos_docs
