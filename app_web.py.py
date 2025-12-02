@@ -13,6 +13,8 @@ import requests
 import streamlit.components.v1 as components
 import pytz
 import io
+# Biblioteca de Menu Bonito
+from streamlit_option_menu import option_menu
 
 # Tenta importar Plotly
 try:
@@ -47,18 +49,16 @@ def get_img_as_base64(file):
 
 img_loading = get_img_as_base64("loading.gif")
 
-# Função de Progresso
 def safe_prog(val):
     try: return max(0, min(100, int(float(val))))
     except: return 0
 
-# CSS PREMIUM
 st.markdown("""
 <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     
-    /* Barra de Progresso VERDE */
-    .stProgress > div > div > div > div { background-color: #00c853; }
+    /* Remove espaço em branco no topo da sidebar */
+    section[data-testid="stSidebar"] > div > div:first-child { padding-top: 1rem; }
     
     /* Cards de Métricas */
     div[data-testid="metric-container"] {
@@ -74,11 +74,10 @@ st.markdown("""
         border: none; color: white;
     }
     
-    /* Forçar ocultação de índices */
-    thead tr th:first-child { display: none }
-    tbody th { display: none }
+    /* Barra de progresso verde */
+    .stProgress > div > div > div > div { background-color: #00c853; }
     
-    /* Ajuste de tabela */
+    /* Tabela */
     [data-testid="stDataFrame"] { width: 100%; }
 </style>
 """, unsafe_allow_html=True)
@@ -137,13 +136,11 @@ def carregar_tudo():
             # Blindagem de Tipos
             for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ']:
                 df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
-                
-            # Tratamento de Data
+            
             for c_date in ['Vencimento', 'Data_Recebimento']:
                 df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
             
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
-            # ID ÚNICO (Unidade + Doc)
             df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
         if df_check.empty: 
@@ -183,7 +180,6 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_c = df_checklist.copy()
         df_c['Feito'] = df_c['Feito'].astype(str)
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
-        
         st.toast("✅ Salvo!", icon="☁️")
         return True
     except Exception as e:
@@ -255,12 +251,28 @@ if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notifi
 if 'doc_focado_id' not in st.session_state: st.session_state['doc_focado_id'] = None
 if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TODOS"
 
+# --- BARRA LATERAL COM MENU PREMIUM ---
 with st.sidebar:
-    if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
-    st.markdown("### LegalizaHealth Pro")
-    st.caption("v23.0 - Clean Rows")
-    menu = st.radio("Menu", ["📊 Painel de Controle", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
+    if img_loading: 
+        st.markdown(f"""<div style="text-align: center; margin-bottom: 20px;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
+    
+    # MENU PRINCIPAL
+    menu = option_menu(
+        menu_title=None,
+        options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"],
+        icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"],
+        menu_icon="cast",
+        default_index=0,
+        styles={
+            "container": {"padding": "0!important", "background-color": "transparent"},
+            "icon": {"color": "#00c853", "font-size": "18px"},
+            "nav-link": {"font-size": "16px", "text-align": "left", "margin":"5px", "--hover-color": "#262730"},
+            "nav-link-selected": {"background-color": "#1f2937"},
+        }
+    )
+    
     st.markdown("---")
+    st.caption("v28.0 - Pro Interface")
 
 # --- ROBÔ ---
 try:
@@ -288,8 +300,8 @@ except: pass
 
 # --- TELAS ---
 
-if menu == "📊 Painel de Controle":
-    st.title("Painel de Controle Estratégico")
+if menu == "Painel Geral":
+    st.title("Painel de Controle")
     if 'dados_cache' in st.session_state: df_p = st.session_state['dados_cache'][0]
     else: df_p, _ = carregar_tudo()
     
@@ -298,6 +310,7 @@ if menu == "📊 Painel de Controle":
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
     
     c1, c2, c3, c4 = st.columns(4)
+    # Botões de Filtro com Estilo
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
     if c3.button(f"🟢 NORMAL: {n_norm}", use_container_width=True): st.session_state['filtro_dash'] = "NORMAL"
@@ -308,7 +321,7 @@ if menu == "📊 Painel de Controle":
     col_graf, col_tab = st.columns([1, 1.5])
     
     with col_graf:
-        st.subheader("Panorama")
+        st.subheader("Visão Geral")
         if not df_p.empty and TEM_PLOTLY:
             status_counts = df_p['Status'].value_counts()
             fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
@@ -317,7 +330,7 @@ if menu == "📊 Painel de Controle":
             st.plotly_chart(fig, use_container_width=True)
             
             media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
-            st.metric("Progresso Geral", f"{media}%")
+            st.metric("Progresso Médio da Rede", f"{media}%")
             st.progress(media)
 
     with col_tab:
@@ -338,23 +351,20 @@ if menu == "📊 Painel de Controle":
                 }
             )
         else:
-            st.info("Nenhum item neste status.")
+            st.info("Nenhum item encontrado.")
 
-elif menu == "📅 Gestão de Documentos":
+elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
     if 'dados_cache' not in st.session_state: st.session_state['dados_cache'] = carregar_tudo()
     df_prazos, df_checklist = st.session_state['dados_cache']
     
     with st.expander("🔍 FILTROS", expanded=True):
-        f1, f2, f3, f4 = st.columns(4) # Ajuste para caber o botão melhor
+        f1, f2, f3 = st.columns(3)
         lista_uni = ["Todas"] + sorted(list(df_prazos['Unidade'].unique())) if 'Unidade' in df_prazos.columns else ["Todas"]
         f_uni = f1.selectbox("Unidade:", lista_uni)
         f_stt = f2.multiselect("Status:", ["CRÍTICO", "ALTO", "NORMAL"])
         f_txt = f3.text_input("Buscar (Nome/CNPJ/Setor):")
-        # Botão alinhado
-        f4.write("") # Espaço
-        f4.write("") 
-        if f4.button("Limpar Filtros", use_container_width=True): st.rerun()
+        if st.button("Limpar"): st.rerun()
 
     df_show = df_prazos.copy()
     if f_uni != "Todas": df_show = df_show[df_show['Unidade'] == f_uni]
@@ -385,8 +395,6 @@ elif menu == "📅 Gestão de Documentos":
                     if n_d:
                         novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
                         df_prazos = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
-                        # Recalcula IDs
-                        df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
                         salvar_alteracoes_completo(df_prazos, df_checklist)
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
                         st.rerun()
@@ -400,7 +408,7 @@ elif menu == "📅 Gestão de Documentos":
                 doc_nome = df_prazos.at[idx, 'Documento']
                 
                 st.subheader(f"📝 {doc_nome}")
-                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | CNPJ: {df_prazos.at[idx, 'CNPJ']} | Setor: {df_prazos.at[idx, 'Setor']}")
+                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
                 
                 c_del, _ = st.columns([1, 4])
                 if c_del.button("🗑️ Excluir"):
@@ -413,7 +421,6 @@ elif menu == "📅 Gestão de Documentos":
 
                 with st.container(border=True):
                     c1, c2, c3 = st.columns(3)
-                    
                     st_curr = df_prazos.at[idx, 'Status']
                     opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
                     if st_curr not in opcoes: st_curr = "NORMAL"
@@ -423,6 +430,9 @@ elif menu == "📅 Gestão de Documentos":
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
                     c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
                     
+                    # EDIÇÃO DO SETOR
+                    novo_setor = st.text_input("Editar Setor", value=df_prazos.at[idx, 'Setor'], key=f"edit_sector_{doc_ativo_id}")
+
                     try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
                     except: d_rec = date.today()
                     df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key=f"dt_rec_{doc_ativo_id}")
@@ -431,8 +441,9 @@ elif menu == "📅 Gestão de Documentos":
                     except: d_venc = date.today()
                     df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key=f"dt_venc_{doc_ativo_id}")
                     
+                    # Atualiza Memória
                     df_prazos.at[idx, 'Status'] = novo_risco
-                    st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                    df_prazos.at[idx, 'Setor'] = novo_setor
                     
                     prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
                     st.progress(prog_atual, text=f"Conclusão: {prog_atual}%")
@@ -442,8 +453,6 @@ elif menu == "📅 Gestão de Documentos":
                 df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
                 mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
                 df_t = df_checklist[mask].copy()
-                # Reseta index para não aparecer números feios (23, 24...)
-                df_t = df_t.reset_index(drop=True)
                 
                 c_add, c_btn = st.columns([3, 1])
                 new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
@@ -455,10 +464,9 @@ elif menu == "📅 Gestão de Documentos":
                         st.rerun()
 
                 if not df_t.empty:
-                    # EDITORA DE TAREFAS DINAMICA (MUDANÇA AQUI)
                     edited = st.data_editor(
                         df_t, 
-                        num_rows="dynamic", # Permite excluir com DEL
+                        num_rows="dynamic", 
                         use_container_width=True, 
                         hide_index=True,
                         column_config={
@@ -469,24 +477,17 @@ elif menu == "📅 Gestão de Documentos":
                         key=f"ed_{doc_ativo_id}"
                     )
                     
-                    tot = len(edited)
-                    done = edited['Feito'].sum()
+                    tot = len(edited); done = edited['Feito'].sum()
                     new_p = int((done/tot)*100) if tot > 0 else 0
                     
-                    # Atualiza Prazos (Barra Progresso)
                     if new_p != prog_atual:
                         df_prazos.at[idx, 'Progresso'] = new_p
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
-
-                    # Atualiza Checklist (Remove e Substitui)
-                    # Só salva se houve mudança real nos dados
+                    
                     if not edited.equals(df_t):
-                        # Remove todas as antigas
                         df_checklist = df_checklist[~mask]
-                        # Adiciona as novas (que podem ter sido deletadas ou editadas)
                         edited['Documento_Ref'] = str(doc_ativo_id)
                         df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
-                        
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
                         if new_p != prog_atual: st.rerun()
                 else: st.info("Adicione tarefas acima.")
@@ -499,7 +500,7 @@ elif menu == "📅 Gestão de Documentos":
                 if st.button("Voltar"): st.session_state['doc_focado_id'] = None; st.rerun()
         else: st.info("👈 Selecione um documento na lista.")
 
-elif menu == "📸 Nova Vistoria":
+elif menu == "Vistoria Mobile":
     st.title("Auditoria Mobile")
     with st.container(border=True):
         c1, c2 = st.columns([1, 2])
@@ -513,7 +514,7 @@ elif menu == "📸 Nova Vistoria":
             st.session_state['vistorias'].append({"Setor": setor, "Item": item, "Situação": sit, "Gravidade": grav, "Obs": obs, "Foto_Binaria": foto})
             st.success("Registrado!")
 
-elif menu == "📂 Relatórios":
+elif menu == "Relatórios":
     st.title("Relatórios")
     tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
     with tab1:
