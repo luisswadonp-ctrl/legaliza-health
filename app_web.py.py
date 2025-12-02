@@ -125,15 +125,17 @@ def carregar_tudo():
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
             
-            # --- BLINDAGEM DE DADOS (Padronização) ---
+            # --- BLINDAGEM DE DADOS ---
             df_prazos['Status'] = df_prazos['Status'].astype(str).str.upper().str.strip()
+            # Garante que se estiver vazio ou errado, vira NORMAL
+            df_prazos['Status'] = df_prazos['Status'].apply(lambda x: x if x in ["NORMAL", "ALTO", "CRÍTICO"] else "NORMAL")
+            
             df_prazos['Documento'] = df_prazos['Documento'].astype(str).str.strip()
             
             for c_date in ['Vencimento', 'Data_Recebimento']:
                 df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
             
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
-            # ID ÚNICO para garantir integridade
             df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
         if df_check.empty: 
@@ -248,7 +250,7 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v26.0 - Data Integrity")
+    st.caption("v27.0 - Fix State")
     menu = st.radio("Menu", ["📊 Painel de Controle", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -378,7 +380,6 @@ elif menu == "📅 Gestão de Documentos":
 
     with col_d:
         if doc_ativo_id:
-            # PROCURA PELO ID ÚNICO
             indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
             
             if not indices.empty:
@@ -400,32 +401,28 @@ elif menu == "📅 Gestão de Documentos":
                 with st.container(border=True):
                     c1, c2, c3 = st.columns(3)
                     
-                    # BLINDAGEM DE STATUS
                     st_curr = df_prazos.at[idx, 'Status']
                     opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
-                    # Se tiver lixo no banco ("Critico", "normal "), corrige para o padrão
-                    if st_curr not in opcoes: 
-                         # Tenta limpar
-                         st_curr_clean = st_curr.upper().strip()
-                         if st_curr_clean in opcoes: st_curr = st_curr_clean
-                         else: st_curr = "NORMAL"
+                    if st_curr not in opcoes: st_curr = "NORMAL"
 
-                    novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key="sel_r")
+                    # --- AQUI ESTÁ A CORREÇÃO DA CHAVE (KEY) ---
+                    novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
                     
-                    # Indicador visual do que está salvo
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
                     c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
 
                     try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
                     except: d_rec = date.today()
-                    df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key="dt_rec")
+                    # CHAVE ÚNICA PARA DATA RECEBIMENTO
+                    df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key=f"dt_rec_{doc_ativo_id}")
                     
                     try: d_venc = pd.to_datetime(df_prazos.at[idx, 'Vencimento'], dayfirst=True).date()
                     except: d_venc = date.today()
-                    df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key="dt_venc")
+                    # CHAVE ÚNICA PARA DATA VENCIMENTO
+                    df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key=f"dt_venc_{doc_ativo_id}")
                     
-                    # ATUALIZA STATUS NA MEMÓRIA
                     df_prazos.at[idx, 'Status'] = novo_risco
+                    st.session_state['dados_cache'] = (df_prazos, df_checklist)
                     
                     prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
                     st.progress(prog_atual, text=f"Conclusão: {prog_atual}%")
@@ -437,8 +434,9 @@ elif menu == "📅 Gestão de Documentos":
                 df_t = df_checklist[mask].copy()
                 
                 c_add, c_btn = st.columns([3, 1])
-                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed")
-                if c_btn.button("ADICIONAR"):
+                # CHAVE ÚNICA PARA O INPUT DE TAREFA
+                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
+                if c_btn.button("ADICIONAR", key=f"btn_add_{doc_ativo_id}"):
                     if new_t:
                         line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
                         df_checklist = pd.concat([df_checklist, line], ignore_index=True)
@@ -447,12 +445,16 @@ elif menu == "📅 Gestão de Documentos":
 
                 if not df_t.empty:
                     edited = st.data_editor(
-                        df_t, num_rows="dynamic", use_container_width=True, hide_index=True,
+                        df_t, 
+                        num_rows="dynamic", 
+                        use_container_width=True, 
+                        hide_index=True,
                         column_config={
                             "Documento_Ref": None,
                             "Tarefa": st.column_config.TextColumn("Descrição", width="medium"),
                             "Feito": st.column_config.CheckboxColumn("OK", width="small")
-                        }, key=f"ed_{doc_ativo_id}"
+                        },
+                        key=f"ed_{doc_ativo_id}"
                     )
                     
                     tot = len(edited); done = edited['Feito'].sum()
@@ -476,7 +478,7 @@ elif menu == "📅 Gestão de Documentos":
             else:
                 st.warning("Documento não encontrado.")
                 if st.button("Voltar"): st.session_state['doc_focado_id'] = None; st.rerun()
-        else: st.info("👈 Selecione um documento.")
+        else: st.info("👈 Selecione um documento na lista.")
 
 elif menu == "📸 Nova Vistoria":
     st.title("Auditoria Mobile")
