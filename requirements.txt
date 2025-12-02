@@ -7,6 +7,6 @@ google-api-python-client
 requests
 pytz
 plotly
-
+streamlit-option-menu
 
 
