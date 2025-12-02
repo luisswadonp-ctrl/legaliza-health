@@ -66,6 +66,11 @@ st.markdown("""
     }
     .stProgress > div > div > div > div { background-color: #00c853; }
     [data-testid="stDataFrame"] { width: 100%; }
+    
+    /* Badge de Status */
+    .status-badge {
+        padding: 5px 10px; border-radius: 15px; font-weight: bold; color: white; display: inline-block; margin-bottom: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -120,17 +125,15 @@ def carregar_tudo():
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
             
-            # --- BLINDAGEM DE TIPOS ---
-            # Força tudo que é texto a ser string, evitando erro de filtro
-            for col_txt in ['Documento', 'Unidade', 'Setor', 'Status', 'CNPJ']:
-                df_prazos[col_txt] = df_prazos[col_txt].astype(str)
+            # --- BLINDAGEM DE DADOS (Padronização) ---
+            df_prazos['Status'] = df_prazos['Status'].astype(str).str.upper().str.strip()
+            df_prazos['Documento'] = df_prazos['Documento'].astype(str).str.strip()
             
             for c_date in ['Vencimento', 'Data_Recebimento']:
                 df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
             
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
-            
-            # ID ÚNICO
+            # ID ÚNICO para garantir integridade
             df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
         if df_check.empty: 
@@ -150,9 +153,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_prazos.clear()
         df_p = df_prazos.copy()
         
-        # Remove ID interno antes de salvar
-        if 'ID_UNICO' in df_p.columns:
-            df_p = df_p.drop(columns=['ID_UNICO'])
+        if 'ID_UNICO' in df_p.columns: df_p = df_p.drop(columns=['ID_UNICO'])
         
         for c_date in ['Vencimento', 'Data_Recebimento']:
             df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
@@ -160,7 +161,6 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_p['Concluido'] = df_p['Concluido'].astype(str)
         df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
         
-        # Garante ordem
         colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
         for c in colunas_ordem: 
             if c not in df_p.columns: df_p[c] = ""
@@ -248,7 +248,7 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v25.0 - Type Safe")
+    st.caption("v26.0 - Data Integrity")
     menu = st.radio("Menu", ["📊 Painel de Controle", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -378,6 +378,7 @@ elif menu == "📅 Gestão de Documentos":
 
     with col_d:
         if doc_ativo_id:
+            # PROCURA PELO ID ÚNICO
             indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
             
             if not indices.empty:
@@ -398,10 +399,23 @@ elif menu == "📅 Gestão de Documentos":
 
                 with st.container(border=True):
                     c1, c2, c3 = st.columns(3)
-                    st_curr = df_prazos.at[idx, 'Status']
-                    if st_curr not in ["NORMAL", "ALTO", "CRÍTICO"]: st_curr = "NORMAL"
-                    df_prazos.at[idx, 'Status'] = c1.selectbox("Risco", ["NORMAL", "ALTO", "CRÍTICO"], index=["NORMAL", "ALTO", "CRÍTICO"].index(st_curr), key="sel_r")
                     
+                    # BLINDAGEM DE STATUS
+                    st_curr = df_prazos.at[idx, 'Status']
+                    opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
+                    # Se tiver lixo no banco ("Critico", "normal "), corrige para o padrão
+                    if st_curr not in opcoes: 
+                         # Tenta limpar
+                         st_curr_clean = st_curr.upper().strip()
+                         if st_curr_clean in opcoes: st_curr = st_curr_clean
+                         else: st_curr = "NORMAL"
+
+                    novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key="sel_r")
+                    
+                    # Indicador visual do que está salvo
+                    cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
+                    c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
+
                     try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
                     except: d_rec = date.today()
                     df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key="dt_rec")
@@ -409,6 +423,9 @@ elif menu == "📅 Gestão de Documentos":
                     try: d_venc = pd.to_datetime(df_prazos.at[idx, 'Vencimento'], dayfirst=True).date()
                     except: d_venc = date.today()
                     df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key="dt_venc")
+                    
+                    # ATUALIZA STATUS NA MEMÓRIA
+                    df_prazos.at[idx, 'Status'] = novo_risco
                     
                     prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
                     st.progress(prog_atual, text=f"Conclusão: {prog_atual}%")
@@ -430,16 +447,12 @@ elif menu == "📅 Gestão de Documentos":
 
                 if not df_t.empty:
                     edited = st.data_editor(
-                        df_t, 
-                        num_rows="dynamic", 
-                        use_container_width=True, 
-                        hide_index=True,
+                        df_t, num_rows="dynamic", use_container_width=True, hide_index=True,
                         column_config={
                             "Documento_Ref": None,
                             "Tarefa": st.column_config.TextColumn("Descrição", width="medium"),
                             "Feito": st.column_config.CheckboxColumn("OK", width="small")
-                        },
-                        key=f"ed_{doc_ativo_id}"
+                        }, key=f"ed_{doc_ativo_id}"
                     )
                     
                     tot = len(edited); done = edited['Feito'].sum()
@@ -463,7 +476,7 @@ elif menu == "📅 Gestão de Documentos":
             else:
                 st.warning("Documento não encontrado.")
                 if st.button("Voltar"): st.session_state['doc_focado_id'] = None; st.rerun()
-        else: st.info("👈 Selecione um documento na lista.")
+        else: st.info("👈 Selecione um documento.")
 
 elif menu == "📸 Nova Vistoria":
     st.title("Auditoria Mobile")
