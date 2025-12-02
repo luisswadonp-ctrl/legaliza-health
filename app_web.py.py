@@ -14,8 +14,6 @@ import streamlit.components.v1 as components
 import pytz
 import io
 from streamlit_option_menu import option_menu 
-import openpyxl 
-import csv 
 
 # Tenta importar Plotly
 try:
@@ -32,52 +30,6 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_GERAL = 120 
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ" 
 
-# --- OPÇÕES DE DOCUMENTOS (LISTA VASTA) ---
-OPCOES_DOCUMENTO = [
-    "Licença de Publicidade", "Conselho de Medicina (CRM)", "Conselho de Farmácia (CRF)", "Licença Sanitária",
-    "Conselho de Enfermagem (COREN)", "CNES", "Inscrição Municipal", "Licença Ambiental", "Alvará de Funcionamento",
-    "Corpo de Bombeiros", "Polícia Civil (Termo de Vistoria)", "Polícia Civil (Licença)", "Conselho de Biomedicina (CRBM)",
-    "Conselho de Biologia (CRBio)", "Conselho de Biomedicina (CRBM) Serviço - Laboratório", "Licença Sanitária Serviço (Laboratório)",
-    "Conselho de Biomedicina (CRBM) Serviço - Posto de Coleta", "Licença Sanitária Serviço (Dispensário)", "Conselho de Nutrição (CRN)",
-    "Conselho de Psicologia (CRP)", "Licença Sanitária Serviço (Farmácia)", "Conselho de Radiologia (CRTR)", "Conselho de Fisioterapia e Terapia Ocupacional (CREFITO)",
-    "Licença Sanitária Serviço (Cozinha/Nutrição)", "Licença Sanitária Serviço (Radiologia)", "Conselho de Fonoaudiologia (CREFONO)",
-    "Licença Sanitária Serviço (Oncologia)", "Licença Sanitária Serviço (Equipamento)", "Licença Sanitária Serviço (Ag. Transfusional)",
-    "Licença Sanitária Serviço (Clínica)", "Conselho de Medicina (CRM) Serviço (Oncologia)", "Conselho de Medicina (CRM) Serviço (Radiologia Clinica)",
-    "Conselho de Medicina (CRM) Serviço (Banco de Sangue)", "Conselho de Enfermagem (COREN) Serviço (Urgência/Emergência)", "Licença Sanitária Serviço (Vacinas)",
-    "Licença Sanitária Serviço (Quimioterapia)", "Conselho de Enfermagem (COREN) Serviço (Oncologia)", "Licença Sanitária Serviço (Equipamento 1)",
-    "Licença Sanitária Serviço (Equipamento 3)", "Licença Sanitária Serviço (Equipamento 5)", "Licença Sanitária Serviço (Equipamento 4)",
-    "Licença Sanitária Serviço (Equipamento 2)", "Conselho de Enfermagem (COREN) Serviço (Quimioterapia)", "Conselho de Farmácia (CRF) Serviço (Oncologia)",
-    "Licença Sanitária Serviço (Ultrassom)", "Licença Sanitária Serviço (SADT - Apoio Diagnóstico Terapêutico)", "Licença Sanitária Serviço (Equipamento 6)",
-    "Declaração de Trâmite Vigilância", "Licença do Comando da Aeronáutica (COMAER)", "Certificado de Manutenção do Sistema de Segurança",
-    "Conselho de Odontologia (CRO)", "Licença Sanitária Serviço (Hemoterapia)", "Licença Sanitária Serviço (Transplante Musculo Esquelético)",
-    "Licença Sanitária Serviço (Hemodinâmica)", "Conselho de Farmácia (CRF) Serviço - Laboratório", "Conselho de Medicina (CRM) Serviço (Endoscopia)",
-    "Conselho de Medicina (CRM) Serviço (UTI Adulto)", "Conselho de Medicina (CRM) Serviço (UTI Neonatal)", "Conselho de Medicina (CRM) Serviço Hemodiálise",
-    "Conselho de Medicina (CRM) Serviço (UTI Pediátrica)", "Conselho de Enfermagem (COREN) Serviço (Nefrologia)", "Conselho de Enfermagem (COREN) Serviço (UTI Neonatal)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 2)", "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 3)", "Conselho de Enfermagem (COREN) Serviço (UTI Pediátrica)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 1)", "Conselho de Enfermagem (COREN) Serviço (Vida & Imagem)", "Carta de anuência tombamento",
-    "Licença Sanitária Serviço (Fisioterapia)", "Licença Sanitária Serviço (Assistência Domiciliar)", "Conselho de Medicina (CRM) Serviço (Ergometria)",
-    "Certificado de acessibilidade", "Conselho de Farmácia (CRF) Serviço - Farmácia de Manipulação", "Licença Sanitária (Tomografia)",
-    "Licença Sanitária Serviço (Transplante de Fígado)", "Conselho de Enfermagem (COREN) Serviço - Hemodinâmica", "Polícia Federal (Licença)",
-    "Conselho de Medicina (CRM) Serviço Hemodinamica", "Conselho de Farmácia (CRF) Serviço - Farmácia Hospitalar", "Licença Sanitária Serviço (Equipamento 9)",
-    "Licença Sanitária Serviço (Equipamento 7)", "Licença Sanitária Serviço (Equipamento 8)", "Licença Sanitária Serviço (Equipamento 15)",
-    "Termo de aceite de sinalização de vaga para deficiente e idoso", "Licença Sanitária Serviço (Equipamento 21)", "Licença Sanitária Serviço (Equipamento 18)",
-    "Licença Sanitária Serviço (Equipamento 19)", "Licença Sanitária Serviço (Hemodiálise)", "Licença Sanitária Serviço (Transplante de Medula Óssea)",
-    "Cadastro de tanques, bombas e equipamentos afins", "Licença Sanitária Serviço (Equipamento 22)", "Licença Sanitária Serviço (Equipamento 11)",
-    "Licença Sanitária Serviço (Equipamento 17)", "Licença Sanitária Serviço (Equipamento 13)", "Licença Sanitária Serviço (Equipamento 10)",
-    "Licença Sanitária Serviço (Equipamento 16)", "Licença Sanitária Serviço (Equipamento 12)", "Licença Sanitária Serviço (Transplante de Rim)",
-    "Licença Sanitária Serviço (Equipamento 14)", "Licença Sanitária Serviço (Equipamento 20)", "Licença Sanitária Serviço (Ambulância)",
-    "Licença Sanitária Serviço (Captação)", "Licença Sanitária Serviço (Registro gráfico, ECG. EEG)", "Licença Sanitária Serviço (Tomografia)",
-    "Conselho de Farmácia (CRF) Serviço - Posto de Coleta", "Licença Sanitária Serviço (Remoção de pacientes)", "Licença Sanitária Serviço (Endoscopia)",
-    "Licença Sanitária Serviço (Pronto Socorro)", "Conselho de Enfermagem (COREN) Serviço (Ambulatorial)", "Conselho de Biomedicina (CRBM) Serviço - Banco de Sangue",
-    "Conselho de Enfermagem (COREN) Serviço (CME)", "Conselho de Enfermagem (COREN) Serviço (UTI)", "Conselho de Medicina (CRM) Serviço (Transplante de Médula Óssea)",
-    "Licença Sanitária Serviço (UTI Adulto)", "Conselho de Medicina (CRM) Serviço (Obstetrícia)", "Licença Sanitária Serviço (UTI Neonatal)",
-    "Licença Sanitária Serviço (Posto de Coleta de Leite Humano)", "Conselho de Medicina (CRM) Serviço (Neonatologia)", "Conselho de Medicina (CRM) Serviço (TME - Transplante de Músculo Esquelético)",
-    "Conselho de Enfermagem (COREN) Serviço (Centro Cirúrgico)", "Conselho de Enfermagem (COREN) Serviço (Internação)", "Conselho de Enfermagem (COREN) Serviço (Maternidade)",
-    "Licença Sanitária Serviço (Fonoaudiologia)", "Licença Sanitária Serviço (Psicologia)", "Licença Sanitária Serviço (Procedimentos Cirúrgicos)",
-    "Licença Sanitária Serviço (Consultório Isolado)", "Conselho de Medicina (CRM) Serviço (Emergência)", "Conselho de Medicina (CRM) Serviço (Pediatria)",
-    "Conselho de Medicina (CRM) - Diálise", "Licença Sanitária Serviço (UTI Mista)", "Projeto Arquitetonico (Visa e Prefeitura)", "Habite-se", "SDR", "SMOP", "Alvará de Obra"
-]
-
 # --- AUTO-REFRESH ---
 components.html("""
 <script>
@@ -87,7 +39,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES CORE ---
+# --- FUNÇÕES ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -149,94 +101,6 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
-# --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS (AUTÔNOMO) ---
-def processar_dados_importados(uploaded_file):
-    """Mapeia o DataFrame importado autonomamente."""
-    df = pd.DataFrame()
-    
-    # 1. Leitura Robusta
-    if uploaded_file.name.endswith('.csv'):
-        uploaded_file.seek(0)
-        try:
-            df = pd.read_csv(uploaded_file, encoding='latin1', sep=';')
-        except:
-            uploaded_file.seek(0)
-            try:
-                df = pd.read_csv(uploaded_file, encoding='utf-8', sep=',')
-            except Exception as e:
-                 st.error(f"Erro de leitura de CSV: Tente salvar o arquivo como CSV com delimitador ponto-e-vírgula.")
-                 return pd.DataFrame()
-                 
-    elif uploaded_file.name.endswith(('.xlsx', '.xls')):
-        try:
-            df = pd.read_excel(uploaded_file, engine='openpyxl')
-        except Exception as e:
-            st.error(f"Erro de leitura de Excel: {e}")
-            return pd.DataFrame()
-
-    if df.empty: return pd.DataFrame()
-
-    # 2. Normalização dos nomes das colunas
-    df.columns = [str(c).strip().replace('.', '').upper() for c in df.columns]
-    
-    # Mapeamento de Colunas (Candidatos)
-    col_map = {
-        'Unidade': ['NOME DA UNIDADE', 'UNIDADE'],
-        'CNPJ': ['CNPJ'],
-        'Setor': ['SETOR FISCALIZADO', 'SETOR'],
-        'Documento': ['NOME DO DOCUMENTO', 'DOCUMENTO', 'TIPO DE DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO', 'PROCESSO'],
-        'Vencimento': ['DATA LIMITE DE ATENDIMENTO', 'VENCIMENTO', 'SLA ESPERADO'],
-        'Data_Recebimento': ['DATA DO DOCUMENTO/RECEBIDO PELA UNIDADE', 'DATA INÍCIO', 'DATA ENVIO PGTO'],
-        'Status_Origem': ['STATUS DO PROCESSO', 'STATUS'],
-        'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO', 'OBSERVAÇÕES', 'OBSERVAÇÃO'],
-    }
-    
-    df_result = pd.DataFrame()
-    hoje = date.today()
-
-    for col_final, col_candidatas in col_map.items():
-        col_encontrada = next((c for c in col_candidatas if c in df.columns), None)
-        
-        val = df[col_encontrada].astype(str).str.strip().fillna('') if col_encontrada else pd.Series([''] * len(df))
-
-        if 'Data' in col_final or 'Vencimento' in col_final:
-            try: df_result[col_final] = pd.to_datetime(val, dayfirst=True, errors='coerce').dt.date.fillna(hoje)
-            except: df_result[col_final] = hoje
-        else:
-            df_result[col_final] = val
-            
-    # Limpeza de Documento (Usa o melhor nome)
-    doc_base = df_result.get('Documento', pd.Series([''] * len(df_result)))
-    df_result['Documento'] = doc_base.apply(lambda x: x if x else 'Não Definido')
-
-    # Mapeamento de Status
-    status_map = {'CONCLUÍDO': 'NORMAL', 'QUITADO': 'NORMAL', 'EM ANDAMENTO': 'ALTO', 'PENDENTE': 'CRÍTICO', 'VENCIDO': 'CRÍTICO', 'EM PGTO': 'ALTO', 'NA': 'NORMAL'}
-    df_result['Status'] = df_result.get('Status_Origem', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
-    
-    # Preenchimento de campos vazios com info amigável
-    for col in ['Unidade', 'Setor', 'CNPJ', 'Comunicado']:
-        if col in df_result.columns:
-            df_result[col] = df_result[col].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado', 'NONE': 'Não Informado'})
-            
-    df_result['Progresso'] = 0
-    df_result['Concluido'] = 'False'
-    
-    # Limpa linhas sem Unidade ou Documento
-    df_result = df_result[(df_result['Unidade'] != 'Não Informado') & (df_result['Documento'] != 'Não Definido')].reset_index(drop=True)
-    
-    colunas_finais = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
-    
-    df_final = pd.DataFrame()
-    for col in colunas_finais:
-        if col in df_result.columns:
-            df_final[col] = df_result[col]
-        else:
-            df_final[col] = 'Não Informado'
-            
-    return df_final.copy()
-
-# --- FUNÇÕES DE CONEXÃO E SALVAMENTO ---
-
 def carregar_tudo():
     try:
         sh = conectar_gsheets()
@@ -250,14 +114,14 @@ def carregar_tudo():
             ws_check.append_row(["Documento_Ref", "Tarefa", "Feito"])
             df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
-        colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
+        colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
         for c in colunas:
             if c not in df_prazos.columns: df_prazos[c] = ""
             
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
             
-            for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ', 'Comunicado']:
+            for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ']:
                 df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
             
             for c_date in ['Vencimento', 'Data_Recebimento']:
@@ -290,7 +154,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_p['Concluido'] = df_p['Concluido'].astype(str)
         df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
         
-        colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
+        colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
         for c in colunas_ordem: 
             if c not in df_p.columns: df_p[c] = ""
         df_p = df_p[colunas_ordem]
@@ -391,7 +255,6 @@ if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
 if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notificacao'] = datetime.min
 if 'doc_focado_id' not in st.session_state: st.session_state['doc_focado_id'] = None
 if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TODOS"
-if 'df_import_preview' not in st.session_state: st.session_state['df_import_preview'] = pd.DataFrame()
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
@@ -411,7 +274,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v36.0 - Import Final")
+    st.caption("v32.0 - Progressão Final")
 
 # --- ROBÔ ---
 try:
@@ -426,20 +289,13 @@ try:
             try:
                 dias = (row['Vencimento'] - hoje).days
                 prog = safe_prog(row['Progresso'])
-                if row['Status'] in ["ALTO", "CRÍTICO"] and prog < 100:
-                    status_alerta = f"{row['Status']} (Manual)"
-                    lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
-                elif dias <= 5 and prog < 100 and row['Status'] not in ["CRÍTICO", "ALTO"]:
-                    status_alerta = f"PRAZO PRÓXIMO"
-                    lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
+                if dias < 0 and prog < 100: lista_alerta.append(f"⛔ ATRASADO: {row['Documento']}")
+                elif dias <= 5 and prog < 100: lista_alerta.append(f"⚠️ VENCE EM {dias} DIAS: {row['Documento']}")
             except: pass
         if lista_alerta:
-            msg_push = "Lista de Pendências:\n\n"
-            for p in lista_alerta[:5]:
-                msg_push += f"- {p['unidade']} ({p['setor']}) - {p['doc']} - Risco: {p['status']}\n"
-            if len(lista_alerta) > 5: msg_push += f"...e mais {len(lista_alerta) - 5} itens."
-            
-            enviar_notificacao_push(f"🚨 {len(lista_alerta)} ALERTAS ATIVOS", msg_push, "high")
+            msg = "\n".join(lista_alerta[:5])
+            if len(lista_alerta) > 5: msg += "\n..."
+            enviar_notificacao_push(f"🚨 ALERTAS", msg, "high")
             st.session_state['ultima_notificacao'] = agora
             st.toast("🤖 Alertas enviados!")
 except: pass
@@ -459,6 +315,8 @@ if menu == "Painel Geral":
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
     
+    # LAYOUT MOBILE: KPIs empilhados, Tabela e Gráfico empilhados.
+    
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
@@ -467,7 +325,7 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # 1. TABELA DE ALERTA (Prioridade no Mobile)
+    # 1. TABELA DE ALERTA
     f_atual = st.session_state['filtro_dash']
     st.subheader(f"Lista de Processos: {f_atual}")
     df_show = df_p.copy()
@@ -481,7 +339,7 @@ if menu == "Painel Geral":
             hide_index=True,
             column_config={
                 "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
-                "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"),
+                "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"), # <--- PROGRESSÃO
                 "Status": st.column_config.TextColumn("Risco", width="small")
             }
         )
@@ -490,7 +348,7 @@ if menu == "Painel Geral":
 
     st.markdown("---")
     
-    # 2. GRÁFICO (Abaixo da Tabela)
+    # 2. GRÁFICO
     st.subheader("Panorama")
     if not df_p.empty and TEM_PLOTLY:
         status_counts = df_p['Status'].value_counts()
@@ -538,84 +396,20 @@ elif menu == "Gestão de Docs":
         doc_ativo_id = st.session_state.get('doc_focado_id')
         
         st.markdown("---")
-        
-        # --- BLOCO DE IMPORTAÇÃO ---
-        with st.expander("⬆️ Importação em Massa"):
-            with st.form("import_docs", clear_on_submit=True):
-                uploaded_file = st.file_uploader("Selecione o arquivo (CSV/Excel)", type=['csv', 'xlsx'])
-                
-                if st.form_submit_button("IMPORTAR E VALIDAR", type="secondary"):
-                    if uploaded_file is not None:
-                        try:
-                            if uploaded_file.name.endswith('.csv'):
-                                try: df_novo_raw = pd.read_csv(uploaded_file, encoding='latin1', sep=';')
-                                except: uploaded_file.seek(0); df_novo_raw = pd.read_csv(uploaded_file, encoding='utf-8', sep=',')
-                            elif uploaded_file.name.endswith(('.xlsx', '.xls')):
-                                df_novo_raw = pd.read_excel(uploaded_file, engine='openpyxl')
-                                
-                            st.toast("Arquivo lido com sucesso!")
-                            
-                            df_novos_docs = processar_dados_importados(df_novo_raw)
-                            
-                            if not df_novos_docs.empty:
-                                st.session_state['df_import_preview'] = df_novos_docs
-                                st.success(f"Dados importados ({len(df_novos_docs)} itens) para revisão! Role para baixo na coluna direita.")
-                            else:
-                                st.error("Não foi possível extrair dados válidos. Verifique a coluna 'Unidade'.")
-
-                        except Exception as e:
-                            st.error(f"Erro ao ler ou processar o arquivo: {e}")
-                            st.session_state['df_import_preview'] = pd.DataFrame() 
+        with st.expander("➕ Novo Documento"):
+            with st.form("new_doc", clear_on_submit=True):
+                n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.text_input("Documento"); n_c = st.text_input("CNPJ")
+                if st.form_submit_button("ADICIONAR"):
+                    if n_d:
+                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
+                        df_prazos = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
+                        df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
+                        salvar_alteracoes_completo(df_prazos, df_checklist)
+                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                        st.rerun()
 
     with col_d:
-        # --- BLOCO DE PRÉ-VISUALIZAÇÃO (Import) ---
-        if 'df_import_preview' in st.session_state and not st.session_state['df_import_preview'].empty:
-            st.subheader(f"🔄 Revisão de Documentos (Importação)")
-            st.info("Revise os dados antes de salvar na nuvem.")
-            
-            df_preview = st.session_state['df_import_preview'].copy()
-            
-            df_edited = st.data_editor(
-                df_preview[['Unidade', 'Setor', 'Documento', 'CNPJ', 'Vencimento', 'Data_Recebimento', 'Status', 'Comunicado']],
-                num_rows="dynamic",
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Vencimento": st.column_config.DateColumn("Vencimento", format="DD/MM/YYYY"),
-                    "Data_Recebimento": st.column_config.DateColumn("Recebimento", format="DD/MM/YYYY"),
-                },
-                key="import_preview_editor"
-            )
-            
-            st.markdown("---")
-            c_i1, c_i2 = st.columns(2)
-            if c_i1.button("✅ Salvar Todos (Importar)", type="primary", use_container_width=True):
-                
-                df_edited['Progresso'] = 0
-                df_edited['Concluido'] = 'False'
-                
-                df_edited['ID_UNICO'] = df_edited['Unidade'].astype(str) + " - " + df_edited['Documento'].astype(str)
-                df_p_current = df_prazos.copy()
-                ids_atuais = df_p_current['ID_UNICO'].tolist()
-                
-                df_to_add = df_edited[~df_edited['ID_UNICO'].isin(ids_atuais)].copy()
-                
-                if not df_to_add.empty:
-                    df_p_current = pd.concat([df_p_current, df_to_add], ignore_index=True)
-                    
-                    if salvar_alteracoes_completo(df_p_current, df_checklist):
-                        del st.session_state['df_import_preview']
-                        st.session_state['dados_cache'] = carregar_tudo()
-                        st.rerun()
-                else:
-                     st.warning("Nenhum documento novo para adicionar.")
-                     
-            if c_i2.button("❌ Descartar", use_container_width=True):
-                del st.session_state['df_import_preview']
-                st.rerun()
-            st.markdown("---")
-
-        elif doc_ativo_id: # --- BLOCO DE EDIÇÃO INDIVIDUAL ---
+        if doc_ativo_id:
             indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
             
             if not indices.empty:
@@ -646,9 +440,8 @@ elif menu == "Gestão de Docs":
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
                     c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; color: white;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
                     
-                    # Edição de Setor / Comunicação
+                    # Edição de Setor
                     novo_setor = st.text_input("Editar Setor", value=df_prazos.at[idx, 'Setor'], key=f"edit_sector_{doc_ativo_id}")
-                    novo_comunicado = st.text_area("Comunicado/Notificação", value=df_prazos.at[idx, 'Comunicado'], key=f"edit_com_{doc_ativo_id}")
                     
                     try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
                     except: d_rec = date.today()
@@ -661,9 +454,9 @@ elif menu == "Gestão de Docs":
                     # ATUALIZA MEMORIA
                     df_prazos.at[idx, 'Status'] = novo_risco
                     df_prazos.at[idx, 'Setor'] = novo_setor
-                    df_prazos.at[idx, 'Comunicado'] = novo_comunicado
                     
                     prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
+                    # PROGRESSÃO
                     st.progress(prog_atual, text=f"Progressão: {prog_atual}%")
 
                 st.write("✅ **Tarefas**")
@@ -673,15 +466,13 @@ elif menu == "Gestão de Docs":
                 df_t = df_checklist[mask].copy().reset_index(drop=True)
                 
                 c_add, c_btn = st.columns([3, 1])
-                # FORMULÁRIO DE ADICIONAR TAREFA
-                with st.form(key=f"add_task_{doc_ativo_id}", clear_on_submit=True):
-                    new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed")
-                    if c_btn.form_submit_button("ADICIONAR"):
-                        if new_t:
-                            line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
-                            df_checklist = pd.concat([df_checklist, line], ignore_index=True)
-                            st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                            st.rerun()
+                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
+                if c_btn.button("ADICIONAR", key=f"btn_add_{doc_ativo_id}"):
+                    if new_t:
+                        line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
+                        df_checklist = pd.concat([df_checklist, line], ignore_index=True)
+                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                        st.rerun()
 
                 if not df_t.empty:
                     edited = st.data_editor(
@@ -727,7 +518,7 @@ elif menu == "Vistoria Mobile":
         setor = c2.selectbox("Local", ["Recepção", "Raio-X", "UTI", "Expurgo", "Cozinha", "Outros"])
         item = c2.text_input("Item")
         sit = c2.radio("Situação", ["❌ Irregular", "✅ Conforme"], horizontal=True)
-        grav = st.select_slider("Risco", ["Baixo", "Médio", "Alto", "CRÍTICO"])
+        grav = c2.select_slider("Risco", ["Baixo", "Médio", "Alto", "CRÍTICO"])
         obs = st.text_area("Obs")
         if st.button("➕ REGISTRAR", type="primary"):
             st.session_state['vistorias'].append({"Setor": setor, "Item": item, "Situação": sit, "Gravidade": grav, "Obs": obs, "Foto_Binaria": foto})
@@ -743,7 +534,9 @@ elif menu == "Relatórios":
             st.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
     with tab2:
         try:
-            df_h = carregar_historico_vistorias()
+            sh = conectar_gsheets()
+            ws = sh.worksheet("Vistorias")
+            df_h = pd.DataFrame(ws.get_all_records())
             if not df_h.empty:
                 sel = st.selectbox("Data:", df_h['Data'].unique())
                 df_f = df_h[df_h['Data'] == sel]
