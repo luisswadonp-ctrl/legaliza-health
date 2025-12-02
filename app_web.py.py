@@ -113,17 +113,25 @@ def carregar_tudo():
             ws_check.append_row(["Documento_Ref", "Tarefa", "Feito"])
             df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
-        # INCLUI SETOR NA LISTA DE COLUNAS OBRIGATORIAS
         colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
         for c in colunas:
             if c not in df_prazos.columns: df_prazos[c] = ""
             
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
-            df_prazos['Documento'] = df_prazos['Documento'].astype(str)
+            
+            # --- BLINDAGEM DE TIPOS ---
+            # Força tudo que é texto a ser string, evitando erro de filtro
+            for col_txt in ['Documento', 'Unidade', 'Setor', 'Status', 'CNPJ']:
+                df_prazos[col_txt] = df_prazos[col_txt].astype(str)
+            
             for c_date in ['Vencimento', 'Data_Recebimento']:
                 df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
+            
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
+            
+            # ID ÚNICO
+            df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
         if df_check.empty: 
             df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
@@ -142,17 +150,19 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_prazos.clear()
         df_p = df_prazos.copy()
         
-        # Formata datas
+        # Remove ID interno antes de salvar
+        if 'ID_UNICO' in df_p.columns:
+            df_p = df_p.drop(columns=['ID_UNICO'])
+        
         for c_date in ['Vencimento', 'Data_Recebimento']:
             df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
             
         df_p['Concluido'] = df_p['Concluido'].astype(str)
         df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
         
-        # Garante ordem correta das colunas COM SETOR
+        # Garante ordem
         colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
-        # Adiciona se faltar
-        for c in colunas_ordem:
+        for c in colunas_ordem: 
             if c not in df_p.columns: df_p[c] = ""
         df_p = df_p[colunas_ordem]
 
@@ -232,12 +242,13 @@ def gerar_pdf(vistorias):
 # --- INTERFACE ---
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
 if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notificacao'] = datetime.min
-if 'doc_focado' not in st.session_state: st.session_state['doc_focado'] = None
+if 'doc_focado_id' not in st.session_state: st.session_state['doc_focado_id'] = None
 if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TODOS"
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
+    st.caption("v25.0 - Type Safe")
     menu = st.radio("Menu", ["📊 Painel de Controle", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -307,7 +318,6 @@ if menu == "📊 Painel de Controle":
             df_show = df_show[df_show['Status'] == f_atual]
             
         if not df_show.empty:
-            # MOSTRA A COLUNA SETOR
             st.dataframe(
                 df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Status']], 
                 use_container_width=True, 
@@ -318,7 +328,7 @@ if menu == "📊 Painel de Controle":
                 }
             )
         else:
-            st.info("Nenhum item.")
+            st.info("Nenhum item neste status.")
 
 elif menu == "📅 Gestão de Documentos":
     st.title("Gestão de Documentos")
@@ -342,23 +352,22 @@ elif menu == "📅 Gestão de Documentos":
     with col_l:
         st.info(f"Lista ({len(df_show)})")
         sel = st.dataframe(
-            df_show[['Unidade', 'Setor', 'Documento', 'Status']], 
+            df_show[['Unidade', 'Documento', 'Status']], 
             use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun",
             column_config={"Status": st.column_config.TextColumn("Risco", width="small")}
         )
         
         if len(sel.selection.rows) > 0:
-            doc_selecionado = df_show.iloc[sel.selection.rows[0]]['Documento']
-            st.session_state['doc_focado'] = doc_selecionado
-        doc_ativo = st.session_state.get('doc_focado')
+            idx_real = sel.selection.rows[0]
+            doc_selecionado_id = df_show.iloc[idx_real]['ID_UNICO']
+            st.session_state['doc_focado_id'] = doc_selecionado_id
+        
+        doc_ativo_id = st.session_state.get('doc_focado_id')
         
         st.markdown("---")
         with st.expander("➕ Novo Documento"):
             with st.form("new_doc", clear_on_submit=True):
-                n_u = st.text_input("Unidade")
-                n_s = st.text_input("Setor") # INPUT DE SETOR
-                n_d = st.text_input("Documento")
-                n_c = st.text_input("CNPJ")
+                n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.text_input("Documento"); n_c = st.text_input("CNPJ")
                 if st.form_submit_button("ADICIONAR"):
                     if n_d:
                         novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
@@ -368,20 +377,23 @@ elif menu == "📅 Gestão de Documentos":
                         st.rerun()
 
     with col_d:
-        if doc_ativo:
-            indices = df_prazos[df_prazos['Documento'] == doc_ativo].index
+        if doc_ativo_id:
+            indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
+            
             if not indices.empty:
                 idx = indices[0]
-                st.subheader(f"📝 {doc_ativo}")
-                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
+                doc_nome = df_prazos.at[idx, 'Documento']
+                
+                st.subheader(f"📝 {doc_nome}")
+                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
                 
                 c_del, _ = st.columns([1, 4])
                 if c_del.button("🗑️ Excluir"):
                     df_prazos = df_prazos.drop(idx).reset_index(drop=True)
-                    df_checklist = df_checklist[df_checklist['Documento_Ref'] != doc_ativo]
+                    df_checklist = df_checklist[df_checklist['Documento_Ref'] != doc_ativo_id]
                     salvar_alteracoes_completo(df_prazos, df_checklist)
                     st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                    st.session_state['doc_focado'] = None
+                    st.session_state['doc_focado_id'] = None
                     st.rerun()
 
                 with st.container(border=True):
@@ -403,16 +415,15 @@ elif menu == "📅 Gestão de Documentos":
 
                 st.write("✅ **Tarefas**")
                 df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
-                # FILTRAGEM RIGOROSA POR TIPO
                 df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
-                mask = df_checklist['Documento_Ref'] == str(doc_ativo)
+                mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
                 df_t = df_checklist[mask].copy()
                 
                 c_add, c_btn = st.columns([3, 1])
                 new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed")
                 if c_btn.button("ADICIONAR"):
                     if new_t:
-                        line = pd.DataFrame([{"Documento_Ref": doc_ativo, "Tarefa": new_t, "Feito": False}])
+                        line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
                         df_checklist = pd.concat([df_checklist, line], ignore_index=True)
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
                         st.rerun()
@@ -428,32 +439,31 @@ elif menu == "📅 Gestão de Documentos":
                             "Tarefa": st.column_config.TextColumn("Descrição", width="medium"),
                             "Feito": st.column_config.CheckboxColumn("OK", width="small")
                         },
-                        key=f"ed_{doc_ativo}"
+                        key=f"ed_{doc_ativo_id}"
                     )
                     
-                    tot = len(edited)
-                    done = edited['Feito'].sum()
+                    tot = len(edited); done = edited['Feito'].sum()
                     new_p = int((done/tot)*100) if tot > 0 else 0
                     
                     if new_p != prog_atual:
                         df_prazos.at[idx, 'Progresso'] = new_p
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
                     
-                    # Salva alterações na lista mestre
-                    # Se houve mudança no conteúdo da tabela (não só progresso)
                     if not edited.equals(df_t):
-                        df_checklist = df_checklist[~mask] # Remove antigos
-                        edited['Documento_Ref'] = str(doc_ativo) # Garante ref
+                        df_checklist = df_checklist[~mask]
+                        edited['Documento_Ref'] = str(doc_ativo_id)
                         df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
                         if new_p != prog_atual: st.rerun()
                 else: st.info("Adicione tarefas acima.")
 
                 st.markdown("---")
-                if st.button("💾 SALVAR TUDO", type="primary"):
+                if st.button("💾 SALVAR TUDO NA NUVEM", type="primary"):
                     if salvar_alteracoes_completo(df_prazos, df_checklist): time.sleep(0.5); st.rerun()
-            else: st.warning("Não encontrado.")
-        else: st.info("👈 Selecione um documento.")
+            else:
+                st.warning("Documento não encontrado.")
+                if st.button("Voltar"): st.session_state['doc_focado_id'] = None; st.rerun()
+        else: st.info("👈 Selecione um documento na lista.")
 
 elif menu == "📸 Nova Vistoria":
     st.title("Auditoria Mobile")
