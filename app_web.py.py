@@ -14,9 +14,7 @@ import streamlit.components.v1 as components
 import pytz
 import io
 from streamlit_option_menu import option_menu 
-import chardet 
 import openpyxl 
-
 # Tenta importar Plotly
 try:
     import plotly.express as px
@@ -41,7 +39,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES CORE ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -103,44 +101,30 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
-# --- FUNÇÃO DE STATUS AUTOMÁTICO (Baseado na data) ---
-def calcular_status_pela_data(data_venc):
-    """Calcula o status SUGERIDO (Critico, Alto, Normal) com base apenas na data."""
-    if pd.isnull(data_venc): return "NORMAL" # Não consegue calcular
-    
-    hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).date()
-    
-    # Garante que data_venc é um objeto date (se não for, o cálculo falha)
-    if not isinstance(data_venc, date):
-        try: data_venc = pd.to_datetime(data_venc).date()
-        except: return "NORMAL"
-        
-    dias = (data_venc - hoje).days
-    
-    if dias < 0: return "CRÍTICO" # Atrasado é sempre crítico
-    elif dias <= 7: return "CRÍTICO" # 0 a 7 dias
-    elif dias <= 15: return "ALTO"   # 8 a 15 dias
-    else: return "NORMAL"
-
 # --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS ---
 def processar_dados_importados(df_importado_raw):
+    """Mapeia o DataFrame importado (CSV/Excel) para o formato do df_prazos."""
     df = df_importado_raw.copy()
+    
+    # Normalização dos nomes das colunas
     df.columns = [str(c).strip().replace('.', '').upper() for c in df.columns]
     
-    # Mapeamento de Colunas
+    # Mapeamento de Colunas (Candidatos)
     col_map = {
         'Unidade': ['NOME DA UNIDADE', 'UNIDADE'],
         'CNPJ': ['CNPJ'],
         'Setor': ['SETOR FISCALIZADO', 'SETOR'],
-        'Documento': ['TIPO DE DOCUMENTO', 'NOME DO DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO'],
+        'Documento': ['TIPO DE DOCUMENTO', 'NOME DO DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO', 'PROCESSO'],
         'Vencimento': ['DATA LIMITE DE ATENDIMENTO', 'VENCIMENTO', 'SLA ESPERADO'],
         'Data_Recebimento': ['DATA DO DOCUMENTO/RECEBIDO PELA UNIDADE', 'DATA INÍCIO', 'DATA ENVIO PGTO'],
-        'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO'], # Campo específico
+        'Status': ['STATUS DO PROCESSO', 'STATUS'],
+        'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO'],
     }
     
     df_result = pd.DataFrame()
     hoje = date.today()
 
+    # Mapeamento de Colunas
     for col_final, col_candidatas in col_map.items():
         col_encontrada = next((c for c in col_candidatas if c in df.columns), None)
         
@@ -152,25 +136,29 @@ def processar_dados_importados(df_importado_raw):
         else:
             df_result[col_final] = val
             
-    # Processamento Final e Limpeza
-    for col in ['Unidade', 'Setor', 'Documento', 'CNPJ', 'Comunicado']:
+    # Limpa Documento e Status
+    df_result['Documento'] = df_result['Documento'].apply(lambda x: x if x else 'Não Definido')
+    
+    status_map = {'CONCLUÍDO': 'NORMAL', 'QUITADO': 'NORMAL', 'EM ANDAMENTO': 'ALTO', 'PENDENTE': 'CRÍTICO', 'VENCIDO': 'CRÍTICO', 'EM PGTO': 'ALTO'}
+    df_result['Status'] = df_result.get('Status', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
+    
+    # Preenchimento de campos vazios com info amigável (Conforme solicitado)
+    for col in ['Unidade', 'Setor', 'CNPJ', 'Comunicado']:
         if col in df_result.columns:
             df_result[col] = df_result[col].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
-
-    df_result = df_result[(df_result['Unidade'] != 'Não Informado') & (df_result['Documento'] != 'Não Informado')].reset_index(drop=True)
+            
+    # Limpa linhas sem Unidade ou Documento
+    df_result = df_result[(df_result['Unidade'] != 'Não Informado') & (df_result['Documento'] != 'Não Definido')].reset_index(drop=True)
     
-    # Adiciona Status SUGERIDO (Novo requisito)
-    df_result['Status'] = df_result['Vencimento'].apply(calcular_status_pela_data)
+    # Campos padrão
     df_result['Progresso'] = 0
     df_result['Concluido'] = 'False'
     
     colunas_finais = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
-    
     for col in colunas_finais:
         if col not in df_result.columns: df_result[col] = ''
             
     return df_result[colunas_finais].copy()
-
 
 # --- FUNÇÕES DE CONEXÃO E SALVAMENTO ---
 
@@ -179,17 +167,21 @@ def carregar_tudo():
         sh = conectar_gsheets()
         ws_prazos = sh.worksheet("Prazos")
         df_prazos = pd.DataFrame(ws_prazos.get_all_records())
-        
-        # ... (Resto da função carregar_tudo - Mantido por consistência)
-        # ...
+        try:
+            ws_check = sh.worksheet("Checklist_Itens")
+            df_check = pd.DataFrame(ws_check.get_all_records())
+        except:
+            ws_check = sh.add_worksheet("Checklist_Itens", 1000, 5)
+            ws_check.append_row(["Documento_Ref", "Tarefa", "Feito"])
+            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
-        # Garante colunas
         colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
         for c in colunas:
             if c not in df_prazos.columns: df_prazos[c] = ""
             
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
+            
             for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ', 'Comunicado']:
                 df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
             
@@ -199,13 +191,8 @@ def carregar_tudo():
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
             df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
-        # Carrega Checklist (Simplificado para o código)
-        try:
-            ws_check = sh.worksheet("Checklist_Itens")
-            df_check = pd.DataFrame(ws_check.get_all_records())
-        except:
-            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
-        if not df_check.empty:
+        if df_check.empty: df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+        else:
             df_check['Documento_Ref'] = df_check['Documento_Ref'].astype(str)
             df_check = df_check[df_check['Tarefa'] != ""]
         
@@ -349,7 +336,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v35.0 - Import & Final")
+    st.caption("v35.0 - Estabilidade Final")
 
 # --- ROBÔ ---
 try:
@@ -405,41 +392,41 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    col_graf, col_tab = st.columns([1, 1.5])
-    
-    with col_graf:
-        st.subheader("Panorama")
-        if not df_p.empty and TEM_PLOTLY:
-            status_counts = df_p['Status'].value_counts()
-            fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
-                color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
-            fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
-            st.plotly_chart(fig, use_container_width=True)
-            
-            media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
-            st.metric("Progressão Geral", f"{media}%")
-            st.progress(media)
+    # 1. TABELA DE ALERTA
+    f_atual = st.session_state['filtro_dash']
+    st.subheader(f"Lista de Processos: {f_atual}")
+    df_show = df_p.copy()
+    if f_atual != "TODOS":
+        df_show = df_show[df_show['Status'] == f_atual]
+        
+    if not df_show.empty:
+        st.dataframe(
+            df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
+                "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"),
+                "Status": st.column_config.TextColumn("Risco", width="small")
+            }
+        )
+    else:
+        st.info("Nenhum item neste status.")
 
-    with col_tab:
-        f_atual = st.session_state['filtro_dash']
-        st.subheader(f"Lista de Processos: {f_atual}")
-        df_show = df_p.copy()
-        if f_atual != "TODOS":
-            df_show = df_show[df_show['Status'] == f_atual]
-            
-        if not df_show.empty:
-            st.dataframe(
-                df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
-                    "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"),
-                    "Status": st.column_config.TextColumn("Risco", width="small")
-                }
-            )
-        else:
-            st.info("Nenhum item neste status.")
+    st.markdown("---")
+    
+    # 2. GRÁFICO (Abaixo da Tabela)
+    st.subheader("Panorama")
+    if not df_p.empty and TEM_PLOTLY:
+        status_counts = df_p['Status'].value_counts()
+        fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
+            color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
+        fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
+        st.plotly_chart(fig, use_container_width=True)
+        
+        media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
+        st.metric("Progressão Geral", f"{media}%")
+        st.progress(media)
 
 elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
@@ -481,7 +468,9 @@ elif menu == "Gestão de Docs":
         with st.expander("⬆️ Importação em Massa"):
             with st.form("import_docs", clear_on_submit=True):
                 uploaded_file = st.file_uploader("Selecione o arquivo (CSV/Excel)", type=['csv', 'xlsx'])
-                # Removido o tipo de documento principal como input, o código mapeia automaticamente
+                tipo_import = st.selectbox("Categoria Principal do Documento:", 
+                                            ["COMUNIQUE-SE/NOTIFICAÇÃO", "PROCESSO EM ANDAMENTO", "TAXA", "OUTROS"], 
+                                            key="tipo_import_cat")
                 
                 if st.form_submit_button("IMPORTAR E VALIDAR", type="secondary"):
                     if uploaded_file is not None:
@@ -494,7 +483,7 @@ elif menu == "Gestão de Docs":
                                 
                             st.toast("Arquivo lido com sucesso!")
                             
-                            df_novos_docs = processar_dados_importados(df_novo_raw) # Chama sem tipo base
+                            df_novos_docs = processar_dados_importados(df_novo_raw, tipo_import)
                             
                             if not df_novos_docs.empty:
                                 st.session_state['df_import_preview'] = df_novos_docs
@@ -508,11 +497,11 @@ elif menu == "Gestão de Docs":
                     else:
                         st.warning("Por favor, carregue um arquivo primeiro.")
 
+    with col_d:
         # --- BLOCO DE PRÉ-VISUALIZAÇÃO (Import) ---
         if 'df_import_preview' in st.session_state and not st.session_state['df_import_preview'].empty:
-            st.markdown("---")
             st.subheader(f"🔄 Revisão de Documentos (Importação)")
-            st.info("Revise os dados. Duplicatas (mesma Unidade + Documento) serão ignoradas no salvamento.")
+            st.info("Revise os dados antes de salvar na nuvem.")
             
             df_preview = st.session_state['df_import_preview'].copy()
             
@@ -535,7 +524,6 @@ elif menu == "Gestão de Docs":
                 df_edited['Progresso'] = 0
                 df_edited['Concluido'] = 'False'
                 
-                # RECALCULA ID UNICO PARA O QUE FOI EDITADO
                 df_edited['ID_UNICO'] = df_edited['Unidade'].astype(str) + " - " + df_edited['Documento'].astype(str)
                 df_p_current = df_prazos.copy()
                 ids_atuais = df_p_current['ID_UNICO'].tolist()
@@ -557,20 +545,7 @@ elif menu == "Gestão de Docs":
                 st.rerun()
             st.markdown("---")
 
-        with st.expander("➕ Novo Documento (Manual)"):
-            with st.form("new_doc", clear_on_submit=True):
-                n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.text_input("Documento"); n_c = st.text_input("CNPJ"); n_com = st.text_input("Comunicado")
-                if st.form_submit_button("ADICIONAR"):
-                    if n_d:
-                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False", "Comunicado": n_com}
-                        df_prazos = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
-                        df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
-                        salvar_alteracoes_completo(df_prazos, df_checklist)
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                        st.rerun()
-
-    with col_d:
-        if doc_ativo_id:
+        elif doc_ativo_id: # --- BLOCO DE EDIÇÃO INDIVIDUAL ---
             indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
             
             if not indices.empty:
@@ -601,10 +576,10 @@ elif menu == "Gestão de Docs":
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
                     c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; color: white;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
                     
-                    # Edição de Setor / CNPJ / Comunicação
+                    # Edição de Setor / Comunicação
                     novo_setor = st.text_input("Editar Setor", value=df_prazos.at[idx, 'Setor'], key=f"edit_sector_{doc_ativo_id}")
                     novo_comunicado = st.text_area("Comunicado/Notificação", value=df_prazos.at[idx, 'Comunicado'], key=f"edit_com_{doc_ativo_id}")
-
+                    
                     try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
                     except: d_rec = date.today()
                     df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key=f"dt_rec_{doc_ativo_id}")
