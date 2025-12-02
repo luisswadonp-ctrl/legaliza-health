@@ -5,3 +5,6 @@ gspread
 oauth2client
 requests
 pytz
+google-api-python-client
+Plaintext
+
