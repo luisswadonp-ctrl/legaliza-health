@@ -31,10 +31,8 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_CHECK_ROBO = 60
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
-# --- 2. CÉREBRO DE INTELIGÊNCIA (BASE DE CONHECIMENTO COMPLETA) ---
-# Dicionário mestre com regras, links e checklists para cada tipo de documento
+# --- 2. CÉREBRO DE INTELIGÊNCIA (BASE DE CONHECIMENTO + TAREFAS) ---
 DOC_INTELLIGENCE = {
-    # --- GERAIS E ESTRUTURAIS ---
     "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura", "tarefas": ["Solicitar renovação na Prefeitura", "Verificar pagamento da taxa TFE", "Afixar original na recepção", "Digitalizar cópia"]},
     "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+vigilancia", "tarefas": ["Protocolar na VISA local", "Atualizar Manual de Boas Práticas", "Laudo de dedetização", "Laudo de limpeza de caixa d'água", "PCMSO e PPRA atualizados"]},
     "Corpo de Bombeiros": {"dias": 1095, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+validade+avcb+clcb+bombeiros", "tarefas": ["Verificar validade extintores", "Teste de hidrantes e mangueiras", "Atestado de brigada de incêndio", "ART elétrica e de gás", "Sinalização de emergência rota de fuga"]},
@@ -51,14 +49,10 @@ DOC_INTELLIGENCE = {
     "Certificado de Manutenção do Sistema de Segurança": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Laudo das câmeras/CFTV", "Teste de alarme de pânico", "Manutenção de cercas elétricas"]},
     "Termo de aceite de sinalização de vaga para deficiente e idoso": {"dias": 0, "risco": "BAIXO", "link": "", "tarefas": ["Pintura de solo visível", "Placa vertical instalada"]},
     "Carta de anuência tombamento": {"dias": 0, "risco": "MÉDIO", "link": "", "tarefas": ["Verificar restrições de fachada", "Autorização para reformas"]},
-
-    # --- POLÍCIA E FORÇAS ---
     "Polícia Civil (Licença)": {"dias": 365, "risco": "ALTO", "link": "https://www.google.com/search?q=policia+civil+produtos+controlados+licenca", "tarefas": ["Relatório trimestral", "Vistoria local armazenamento", "Taxa fiscalização"]},
     "Polícia Civil (Termo de Vistoria)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Agendar vistoria", "Livro de registro atualizado"]},
     "Polícia Federal (Licença)": {"dias": 365, "risco": "ALTO", "link": "https://servicos.dpf.gov.br/sifep-consulta-licencas/", "tarefas": ["Mapas mensais produtos químicos", "Renovação CRC/CLF", "Controle de estoque rigoroso"]},
     "Licença do Comando da Aeronáutica (COMAER)": {"dias": 1095, "risco": "ALTO", "link": "https://www.gov.br/comaer/pt-br", "tarefas": ["Aprovação do AGA (Área de Gerenciamento)", "Sinalização de topo de prédio (se houver heliponto)"]},
-
-    # --- CONSELHOS DE CLASSE (Profissionais e Serviços) ---
     "Conselho de Medicina (CRM)": {"dias": 365, "risco": "ALTO", "link": "https://portal.cfm.org.br/busca-medicos/", "tarefas": ["Renovar Certificado de Regularidade", "Atualizar lista corpo clínico", "Anuidade PJ paga", "Diretor Técnico validado"]},
     "Conselho de Enfermagem (COREN)": {"dias": 365, "risco": "ALTO", "link": "http://www.cofen.gov.br/", "tarefas": ["Emitir CRT (Certidão Resp. Técnica)", "Dimensionamento de Enfermagem", "Escala mensal assinada"]},
     "Conselho de Farmácia (CRF)": {"dias": 365, "risco": "ALTO", "link": "https://www.cff.org.br/", "tarefas": ["Certidão de Regularidade Técnica", "Farmacêutico presente integralmente", "Baixa de responsabilidade anterior"]},
@@ -70,8 +64,6 @@ DOC_INTELLIGENCE = {
     "Conselho de Radiologia (CRTR)": {"dias": 365, "risco": "ALTO", "link": "http://conter.gov.br/", "tarefas": ["Supervisor de Proteção Radiológica", "Lista de técnicos"]},
     "Conselho de Fisioterapia e Terapia Ocupacional (CREFITO)": {"dias": 365, "risco": "MÉDIO", "link": "https://www.coffito.gov.br/", "tarefas": ["DRF (Declaração de Regularidade)", "Responsável Técnico Fisioterapeuta"]},
     "Conselho de Fonoaudiologia (CREFONO)": {"dias": 365, "risco": "MÉDIO", "link": "https://www.fonoaudiologia.org.br/", "tarefas": ["Registro de Pessoa Jurídica", "Fonoaudiólogo RT"]},
-
-    # --- SERVIÇOS ESPECÍFICOS (Vigilância e Conselhos) ---
     "Licença Sanitária Serviço (Farmácia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Controle de temperatura (geladeira/ambiente)", "Livro de controlados (SNGPC)", "Qualificação de fornecedores"]},
     "Licença Sanitária Serviço (Laboratório)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Controle de Qualidade Interno/Externo (PNCQ/PELM)", "Calibração de pipetas/equipamentos", "PGRSS (Resíduos Químicos/Biológicos)"]},
     "Licença Sanitária Serviço (Radiologia)": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=portaria+453+anvisa+radiologia", "tarefas": ["Levantamento Radiométrico (LRA)", "Testes de Constância/Qualidade", "Dosimetria mensal funcionários", "Memorial descritivo de blindagem"]},
@@ -100,68 +92,16 @@ DOC_INTELLIGENCE = {
     "Licença Sanitária Serviço (Transplante de Rim)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Credenciamento SNT", "Suporte de diálise", "Protocolos de imunossupressão"]},
     "Licença Sanitária Serviço (Transplante Musculo Esquelético)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Banco de tecidos", "Rastreabilidade"]},
     "Licença Sanitária Serviço (Captação)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["CIHDOTT ativa", "Protocolo de morte encefálica"]},
-    
-    # --- EQUIPAMENTOS ESPECÍFICOS (Agrupados para facilitar) ---
     "Licença Sanitária Serviço (Equipamento)": {"dias": 365, "risco": "MÉDIO", "link": "https://www.google.com/search?q=gestao+equipamentos+hospitalares+anvisa", "tarefas": ["Manutenção Preventiva", "Calibração", "Teste de segurança elétrica", "Etiqueta de validade visível"]},
     "Cadastro de tanques, bombas e equipamentos afins": {"dias": 1825, "risco": "ALTO", "link": "", "tarefas": ["Teste de estanqueidade", "Limpeza de tanques", "Licença ambiental específica"]},
     "Licença Sanitária Serviço (Registro gráfico, ECG. EEG)": {"dias": 365, "risco": "BAIXO", "link": "", "tarefas": ["Calibração do equipamento", "Laudos assinados por especialista"]},
-    
-    # --- PADRÃO PARA ITENS GENÉRICOS ---
     "DEFAULT": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Verificar validade do documento", "Digitalizar comprovante", "Agendar renovação"]}
 }
 
-# Adiciona lógica genérica para todos os "Equipamento X" ou itens repetidos
-for i in range(1, 25): # Cobre Equipamento 1 até 22+
+for i in range(1, 25): 
     DOC_INTELLIGENCE[f"Licença Sanitária Serviço (Equipamento {i})"] = DOC_INTELLIGENCE["Licença Sanitária Serviço (Equipamento)"]
 
-# Lista completa para o dropdown (a partir das chaves do dicionário + lista original para garantir)
-LISTA_TIPOS_DOCUMENTOS = sorted(list(set(list(DOC_INTELLIGENCE.keys()) + [
-    "Licença de Publicidade", "Conselho de Medicina (CRM)", "Conselho de Farmácia (CRF)", "Licença Sanitária",
-    "Conselho de Enfermagem (COREN)", "CNES", "Inscrição Municipal", "Licença Ambiental", "Alvará de Funcionamento",
-    "Corpo de Bombeiros", "Polícia Civil (Termo de Vistoria)", "Polícia Civil (Licença)", "Conselho de Biomedicina (CRBM)",
-    "Conselho de Biologia (CRBio)", "Conselho de Biomedicina (CRBM) Serviço - Laboratório", "Licença Sanitária Serviço (Laboratório)",
-    "Conselho de Biomedicina (CRBM) Serviço - Posto de Coleta", "Licença Sanitária Serviço (Dispensário)", "Conselho de Nutrição (CRN)",
-    "Conselho de Psicologia (CRP)", "Licença Sanitária Serviço (Farmácia)", "Conselho de Radiologia (CRTR)",
-    "Conselho de Fisioterapia e Terapia Ocupacional (CREFITO)", "Licença Sanitária Serviço (Cozinha/Nutrição)",
-    "Licença Sanitária Serviço (Radiologia)", "Conselho de Fonoaudiologia (CREFONO)", "Licença Sanitária Serviço (Oncologia)",
-    "Licença Sanitária Serviço (Equipamento)", "Licença Sanitária Serviço (Ag. Transfusional)", "Licença Sanitária Serviço (Clínica)",
-    "Conselho de Medicina (CRM) Serviço (Oncologia)", "Conselho de Medicina (CRM) Serviço (Radiologia Clinica)",
-    "Conselho de Medicina (CRM) Serviço (Banco de Sangue)", "Conselho de Enfermagem (COREN) Serviço (Urgência/Emergência)",
-    "Licença Sanitária Serviço (Vacinas)", "Licença Sanitária Serviço (Quimioterapia)", "Conselho de Enfermagem (COREN) Serviço (Oncologia)",
-    "Licença Sanitária Serviço (Equipamento 1)", "Licença Sanitária Serviço (Equipamento 3)", "Licença Sanitária Serviço (Equipamento 5)",
-    "Licença Sanitária Serviço (Equipamento 4)", "Licença Sanitária Serviço (Equipamento 2)", "Conselho de Enfermagem (COREN) Serviço (Quimioterapia)",
-    "Conselho de Farmácia (CRF) Serviço (Oncologia)", "Licença Sanitária Serviço (Ultrassom)", "Licença Sanitária Serviço (SADT - Apoio Diagnóstico Terapêutico)",
-    "Licença Sanitária Serviço (Equipamento 6)", "Declaração de Trâmite Vigilância", "Licença do Comando da Aeronáutica (COMAER)",
-    "Certificado de Manutenção do Sistema de Segurança", "Conselho de Odontologia (CRO)", "Licença Sanitária Serviço (Hemoterapia)",
-    "Licença Sanitária Serviço (Transplante Musculo Esquelético)", "Licença Sanitária Serviço (Hemodinâmica)", "Conselho de Farmácia (CRF) Serviço - Laboratório",
-    "Conselho de Medicina (CRM) Serviço (Endoscopia)", "Conselho de Medicina (CRM) Serviço (UTI Adulto)", "Conselho de Medicina (CRM) Serviço (UTI Neonatal)",
-    "Conselho de Medicina (CRM) Serviço Hemodiálise", "Conselho de Medicina (CRM) Serviço (UTI Pediátrica)", "Conselho de Enfermagem (COREN) Serviço (Nefrologia)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI Neonatal)", "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 2)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 3)", "Conselho de Enfermagem (COREN) Serviço (UTI Pediátrica)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 1)", "Conselho de Enfermagem (COREN) Serviço (Vida & Imagem)",
-    "Carta de anuência tombamento", "Licença Sanitária Serviço (Fisioterapia)", "Licença Sanitária Serviço (Assistência Domiciliar)",
-    "Conselho de Medicina (CRM) Serviço (Ergometria)", "Certificado de acessibilidade", "Conselho de Farmácia (CRF) Serviço - Farmácia de Manipulação",
-    "Licença Sanitária (Tomografia)", "Licença Sanitária Serviço (Transplante de Fígado)", "Conselho de Enfermagem (COREN) Serviço - Hemodinâmica",
-    "Polícia Federal (Licença)", "Conselho de Medicina (CRM) Serviço Hemodinamica", "Conselho de Farmácia (CRF) Serviço - Farmácia Hospitalar",
-    "Licença Sanitária Serviço (Equipamento 9)", "Licença Sanitária Serviço (Equipamento 7)", "Licença Sanitária Serviço (Equipamento 8)",
-    "Licença Sanitária Serviço (Equipamento 15)", "Termo de aceite de sinalização de vaga para deficiente e idoso", "Licença Sanitária Serviço (Equipamento 21)",
-    "Licença Sanitária Serviço (Equipamento 18)", "Licença Sanitária Serviço (Equipamento 19)", "Licença Sanitária Serviço (Hemodiálise)",
-    "Licença Sanitária Serviço (Transplante de Medula Óssea)", "Cadastro de tanques, bombas e equipamentos afins", "Licença Sanitária Serviço (Equipamento 22)",
-    "Licença Sanitária Serviço (Equipamento 11)", "Licença Sanitária Serviço (Equipamento 17)", "Licença Sanitária Serviço (Equipamento 13)",
-    "Licença Sanitária Serviço (Equipamento 10)", "Licença Sanitária Serviço (Equipamento 16)", "Licença Sanitária Serviço (Equipamento 12)",
-    "Licença Sanitária Serviço (Transplante de Rim)", "Licença Sanitária Serviço (Equipamento 14)", "Licença Sanitária Serviço (Equipamento 20)",
-    "Licença Sanitária Serviço (Ambulância)", "Licença Sanitária Serviço (Captação)", "Licença Sanitária Serviço (Registro gráfico, ECG. EEG)",
-    "Licença Sanitária Serviço (Tomografia)", "Conselho de Farmácia (CRF) Serviço - Posto de Coleta", "Licença Sanitária Serviço (Remoção de pacientes)",
-    "Licença Sanitária Serviço (Endoscopia)", "Licença Sanitária Serviço (Pronto Socorro)", "Conselho de Enfermagem (COREN) Serviço (Ambulatorial)",
-    "Conselho de Biomedicina (CRBM) Serviço - Banco de Sangue", "Conselho de Enfermagem (COREN) Serviço (CME)", "Conselho de Enfermagem (COREN) Serviço (UTI)",
-    "Conselho de Medicina (CRM) Serviço (Transplante de Médula Óssea)", "Licença Sanitária Serviço (UTI Adulto)", "Conselho de Medicina (CRM) Serviço (Obstetrícia)",
-    "Licença Sanitária Serviço (UTI Neonatal)", "Licença Sanitária Serviço (Posto de Coleta de Leite Humano)", "Conselho de Medicina (CRM) Serviço (Neonatologia)",
-    "Conselho de Medicina (CRM) Serviço (TME - Transplante de Músculo Esquelético)", "Conselho de Enfermagem (COREN) Serviço (Centro Cirúrgico)",
-    "Conselho de Enfermagem (COREN) Serviço (Internação)", "Conselho de Enfermagem (COREN) Serviço (Maternidade)", "Licença Sanitária Serviço (Fonoaudiologia)",
-    "Licença Sanitária Serviço (Psicologia)", "Licença Sanitária Serviço (Procedimentos Cirúrgicos)", "Licença Sanitária Serviço (Consultório Isolado)",
-    "Conselho de Medicina (CRM) Serviço (Emergência)", "Conselho de Medicina (CRM) Serviço (Pediatria)", "Conselho de Medicina (CRM) - Diálise",
-    "Licença Sanitária Serviço (UTI Mista)", "Projeto Arquitetonico (Visa e Prefeitura)", "Habite-se", "SDR", "SMOP", "Alvará de Obra", "Outros"
-])))
+LISTA_TIPOS_DOCUMENTOS = sorted(list(set(list(DOC_INTELLIGENCE.keys()) + ["Outros"])))
 
 # --- AUTO-REFRESH ---
 components.html("""
@@ -192,11 +132,9 @@ def normalizar_texto(texto):
 def aplicar_inteligencia_doc(tipo_doc, data_base=None):
     if not data_base: data_base = date.today()
     
-    # Busca exata ou por palavra chave
     info = DOC_INTELLIGENCE.get(tipo_doc)
     
     if not info:
-        # Tenta encontrar algo parecido se não achar exato (Ex: Equipamento 5 -> Equipamento)
         for chave, dados in DOC_INTELLIGENCE.items():
             if chave in tipo_doc:
                 info = dados
@@ -451,7 +389,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v41.0 - Knowledge Base Expandida")
+    st.caption("v42.0 - Vistoria Mobile Aprimorada")
 
 # --- ROBÔ INTELIGENTE V2 ---
 try:
@@ -842,18 +780,82 @@ elif menu == "Gestão de Docs":
         else: st.info("👈 Selecione um documento na lista.")
 
 elif menu == "Vistoria Mobile":
-    st.title("Auditoria Mobile")
+    st.title("Auditoria Mobile (v42.0)")
+    
+    # --- MODO OFFLINE / FILA ---
+    if 'fila_vistoria' not in st.session_state: st.session_state['fila_vistoria'] = []
+    
+    with st.expander("📶 Fila de Envio (Modo Offline)", expanded=len(st.session_state['fila_vistoria']) > 0):
+        if len(st.session_state['fila_vistoria']) == 0:
+            st.info("Nenhuma vistoria pendente.")
+        else:
+            st.warning(f"Você tem {len(st.session_state['fila_vistoria'])} vistorias pendentes de envio!")
+            if st.button("🚀 ENVIAR TUDO AGORA"):
+                salvar_vistoria_db(st.session_state['fila_vistoria'])
+                st.session_state['fila_vistoria'] = [] # Limpa a fila
+                st.rerun()
+
+    # --- FORMULÁRIO DE VISTORIA ---
     with st.container(border=True):
         c1, c2 = st.columns([1, 2])
-        foto = c1.camera_input("Foto")
-        setor = c2.selectbox("Local", ["Recepção", "Raio-X", "UTI", "Expurgo", "Cozinha", "Outros"])
-        item = c2.text_input("Item")
+        
+        # --- 1. MÚLTIPLAS FOTOS ---
+        # Como o streamlit nativo de camera só aceita uma por vez, criamos uma lista temporária na sessão
+        if 'fotos_temp' not in st.session_state: st.session_state['fotos_temp'] = []
+        
+        foto = c1.camera_input("Tirar Foto")
+        if foto:
+            # Adiciona à lista temporária se não for repetida (buffer simples)
+            if not st.session_state['fotos_temp'] or foto.getvalue() != st.session_state['fotos_temp'][-1].getvalue():
+                st.session_state['fotos_temp'].append(foto)
+                st.toast("Foto adicionada!")
+        
+        # Galeria de fotos tiradas
+        if st.session_state['fotos_temp']:
+            c1.write(f"📸 {len(st.session_state['fotos_temp'])} fotos capturadas")
+            c1.image(st.session_state['fotos_temp'], width=100)
+            if c1.button("Limpar Fotos"): 
+                st.session_state['fotos_temp'] = []
+                st.rerun()
+
+        setor = c2.selectbox("Local", ["Recepção", "Raio-X", "UTI", "Expurgo", "Cozinha", "Outros", "Farmácia", "Almoxarifado"])
+        item = c2.text_input("Item Avaliado")
+        
         sit = c2.radio("Situação", ["❌ Irregular", "✅ Conforme"], horizontal=True)
         grav = c2.select_slider("Risco", ["Baixo", "Médio", "Alto", "CRÍTICO"])
-        obs = st.text_area("Obs")
-        if st.button("➕ REGISTRAR", type="primary"):
-            st.session_state['vistorias'].append({"Setor": setor, "Item": item, "Situação": sit, "Gravidade": grav, "Obs": obs, "Foto_Binaria": foto})
-            st.success("Registrado!")
+        
+        # --- 3. DITADO DE VOZ (Simulação via UX) ---
+        obs = c2.text_area("Observações (Clique no microfone do teclado para ditar)")
+        
+        if st.button("➕ REGISTRAR VISTORIA", type="primary"):
+            if not item:
+                st.error("Preencha o nome do item.")
+            else:
+                # Cria um registro para cada foto (ou um registro agrupado, dependendo da lógica do banco)
+                # Aqui vamos simplificar: Salva a primeira foto no registro principal, ou cria múltiplos registros
+                
+                novos_itens = []
+                
+                # Se tiver fotos, cria um registro principal com a primeira
+                foto_principal = st.session_state['fotos_temp'][0] if st.session_state['fotos_temp'] else None
+                
+                registro = {
+                    "Setor": setor, 
+                    "Item": item, 
+                    "Situação": sit, 
+                    "Gravidade": grav, 
+                    "Obs": obs, 
+                    "Foto_Binaria": foto_principal
+                }
+                
+                # Adiciona à fila de envio (Buffer Offline)
+                st.session_state['fila_vistoria'].append(registro)
+                
+                # Se tiver mais fotos, cria registros anexos (opcional, ou apenas salva no drive)
+                # Para simplificar na planilha, vamos salvar apenas a primeira por enquanto ou precisaríamos mudar a estrutura do DB
+                
+                st.session_state['fotos_temp'] = [] # Limpa fotos
+                st.success("Vistoria salva na Fila de Envio! Clique em 'Enviar Tudo' quando tiver internet.")
 
 elif menu == "Relatórios":
     st.title("Relatórios")
