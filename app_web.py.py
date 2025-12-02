@@ -552,4 +552,67 @@ elif menu == "Relatórios":
                     pdf = gerar_pdf(df_f.to_dict('records'))
                     st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
         except: st.error("Sem histórico.")
+            # ... código anterior ...
+    col_l, col_d = st.columns([1.2, 2])
+    with col_l:
+        st.info(f"Lista ({len(df_show)})")
+# ... st.dataframe sel ...
+# ... st.markdown("---") ...
+        with st.expander("➕ Novo Documento"):
+# ... Código para adicionar novo documento manualmente ...
+# ------------------------------------------------------------------
+# NOVO BLOCO: Importação de Documentos em Massa
+# ------------------------------------------------------------------
+        st.markdown("---")
+        with st.expander("⬆️ Importar em Massa (Excel/CSV)"):
+            import_file = st.file_uploader("Carregar arquivo (.xlsx ou .csv)", type=['xlsx', 'csv'])
+            if import_file:
+                # 1. Leitura do Arquivo e Tratamento
+                try:
+                    if import_file.name.endswith('.csv'):
+                        df_novo = pd.read_csv(import_file, encoding='utf-8')
+                    else:
+                        df_novo = pd.read_excel(import_file)
+                    
+                    # 2. Normalização e Preenchimento de Colunas Faltantes
+                    colunas_base = ['Unidade', 'Setor', 'Documento', 'CNPJ']
+                    for col in colunas_base:
+                        if col not in df_novo.columns:
+                            df_novo[col] = ""
+                    
+                    df_novo = df_novo[colunas_base]
+                    
+                    # 3. Preenchimento dos Valores Padrão (Default)
+                    hoje = date.today()
+                    df_novo['Data_Recebimento'] = hoje
+                    df_novo['Vencimento'] = hoje
+                    df_novo['Status'] = "NORMAL"
+                    df_novo['Progresso'] = 0
+                    df_novo['Concluido'] = "False"
+                    
+                    # Limpeza mínima: remove linhas sem nome de documento
+                    df_novo = df_novo[df_novo['Documento'].astype(str).str.strip() != ""]
+
+                    if st.button(f"Integrar {len(df_novo)} Documentos", type="primary"):
+                        # 4. Integração no DataFrame Principal
+                        global df_prazos, df_checklist # Garante acesso global
+                        
+                        # Adiciona ID_UNICO para o novo DataFrame
+                        df_novo['ID_UNICO'] = df_novo['Unidade'].astype(str) + " - " + df_novo['Documento'].astype(str)
+                        
+                        # Junta com o DataFrame existente e remove duplicatas (se o ID_UNICO já existir)
+                        df_prazos = pd.concat([df_prazos, df_novo], ignore_index=True)
+                        df_prazos = df_prazos.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
+                        
+                        # 5. Atualiza o cache e Salva (Opcional, mas recomendado para persistir)
+                        salvar_alteracoes_completo(df_prazos, df_checklist)
+                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                        st.success(f"✅ {len(df_novo)} documentos importados e salvos!")
+                        st.balloons()
+                        st.rerun()
+
+                except Exception as e:
+                    st.error(f"Erro ao processar o arquivo. Verifique se as colunas estão corretas. Detalhe: {e}")
+# ... restante do código ...
+
 
