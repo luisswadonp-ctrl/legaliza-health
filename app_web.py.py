@@ -31,67 +31,91 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_CHECK_ROBO = 60
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
-# --- 2. CÉREBRO DE INTELIGÊNCIA (BASE DE CONHECIMENTO + TAREFAS) ---
+# --- 2. CÉREBRO DE INTELIGÊNCIA (BASE DE CONHECIMENTO COMPLETA) ---
+# Dicionário mestre com regras, links e checklists para cada tipo de documento
 DOC_INTELLIGENCE = {
-    "Alvará de Funcionamento": {
-        "dias": 365, "risco": "CRÍTICO", 
-        "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura",
-        "tarefas": ["Solicitar renovação na Prefeitura", "Verificar pagamento da taxa", "Afixar original na recepção", "Digitalizar cópia para o drive"]
-    },
-    "Licença Sanitária": {
-        "dias": 365, "risco": "CRÍTICO", 
-        "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+anvisa",
-        "tarefas": ["Protocolar pedido na Vigilância Sanitária", "Revisar Manual de Boas Práticas", "Verificar dedetização semestral", "Limpeza da caixa d'água", "Acompanhar inspeção"]
-    },
-    "Corpo de Bombeiros": {
-        "dias": 1095, "risco": "CRÍTICO", 
-        "link": "https://www.google.com/search?q=consulta+avcb+bombeiros",
-        "tarefas": ["Verificar validade dos extintores", "Teste de mangueiras e hidrantes", "Sinalização de saída de emergência", "Treinamento da Brigada de Incêndio", "ART do sistema de gás"]
-    },
-    "Conselho de Medicina (CRM)": {
-        "dias": 365, "risco": "ALTO", 
-        "link": "https://portal.cfm.org.br/busca-medicos/",
-        "tarefas": ["Atualizar lista de corpo clínico", "Verificar anuidade do Diretor Técnico", "Enviar alteração contratual (se houver)", "Pagar taxa de renovação PJ"]
-    },
-    "Conselho de Enfermagem (COREN)": {
-        "dias": 365, "risco": "ALTO", 
-        "link": "http://www.cofen.gov.br/",
-        "tarefas": ["Atualizar Certidão de Responsabilidade Técnica (CRT)", "Verificar dimensionamento de pessoal", "Escala de enfermeiros atualizada"]
-    },
-    "Conselho de Farmácia (CRF)": {
-        "dias": 365, "risco": "ALTO", 
-        "link": "https://www.cff.org.br/",
-        "tarefas": ["Renovar Certidão de Regularidade", "Verificar presença do farmacêutico no horário integral", "Controle de temperatura da geladeira"]
-    },
-    "CNES": {
-        "dias": 180, "risco": "CRÍTICO", 
-        "link": "https://cnes.datasus.gov.br/",
-        "tarefas": ["Atualizar cadastro no site do DATASUS", "Verificar equipamentos cadastrados", "Atualizar profissionais desligados/admitidos"]
-    },
-    "Licença Ambiental": {
-        "dias": 1460, "risco": "MÉDIO", 
-        "link": "https://www.google.com/search?q=licenca+ambiental+consulta",
-        "tarefas": ["Verificar manifesto de resíduos (MTR)", "Plano de Gerenciamento de Resíduos (PGRSS)", "Renovação da licença de operação"]
-    },
-    "Polícia Civil (Licença)": {
-        "dias": 365, "risco": "ALTO", 
-        "link": "https://www.google.com/search?q=policia+civil+produtos+controlados",
-        "tarefas": ["Relatório trimestral de produtos controlados", "Vistoria do local de armazenamento", "Pagar taxa de fiscalização"]
-    },
-    "Polícia Federal (Licença)": {
-        "dias": 365, "risco": "ALTO", 
-        "link": "https://www.gov.br/pf/pt-br",
-        "tarefas": ["Enviar mapas mensais de produtos quimicos", "Renovar Certificado de Registro Cadastral", "Verificar validade da Licença de Funcionamento"]
-    },
-    "Licença de Publicidade": {
-        "dias": 365, "risco": "NORMAL", 
-        "link": "",
-        "tarefas": ["Verificar medidas da fachada", "Pagar taxa de publicidade (TFE/TFA)"]
-    },
+    # --- GERAIS E ESTRUTURAIS ---
+    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura", "tarefas": ["Solicitar renovação na Prefeitura", "Verificar pagamento da taxa TFE", "Afixar original na recepção", "Digitalizar cópia"]},
+    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+vigilancia", "tarefas": ["Protocolar na VISA local", "Atualizar Manual de Boas Práticas", "Laudo de dedetização", "Laudo de limpeza de caixa d'água", "PCMSO e PPRA atualizados"]},
+    "Corpo de Bombeiros": {"dias": 1095, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+validade+avcb+clcb+bombeiros", "tarefas": ["Verificar validade extintores", "Teste de hidrantes e mangueiras", "Atestado de brigada de incêndio", "ART elétrica e de gás", "Sinalização de emergência rota de fuga"]},
+    "Licença Ambiental": {"dias": 1460, "risco": "MÉDIO", "link": "https://www.google.com/search?q=licenca+ambiental+orgao+estadual+meio+ambiente", "tarefas": ["CADRI / Manifesto de Resíduos", "Plano de Gerenciamento de Resíduos (PGRSS)", "Renovação da Licença de Operação (LO)"]},
+    "Inscrição Municipal": {"dias": 0, "risco": "NORMAL", "link": "https://www.google.com/search?q=consulta+inscricao+municipal+prefeitura", "tarefas": ["Verificar regularidade fiscal", "Atualizar dados cadastrais na prefeitura"]},
+    "CNES": {"dias": 180, "risco": "CRÍTICO", "link": "https://cnes.datasus.gov.br/pages/estabelecimentos/consulta.jsp", "tarefas": ["Atualizar Responsável Técnico", "Atualizar quadro de profissionais (demissões/admissões)", "Atualizar equipamentos e serviços"]},
+    "Licença de Publicidade": {"dias": 365, "risco": "NORMAL", "link": "https://www.google.com/search?q=licenca+publicidade+engenho+cidade", "tarefas": ["Medir área da fachada", "Pagar taxa de publicidade (TFA)", "Verificar padrão visual"]},
+    "Habite-se": {"dias": 0, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+habite-se+prefeitura", "tarefas": ["Verificar arquivamento original", "Conferir metragem construída vs projeto"]},
+    "Projeto Arquitetonico (Visa e Prefeitura)": {"dias": 0, "risco": "ALTO", "link": "", "tarefas": ["Aprovação na Vigilância Sanitária (LTA)", "Aprovação na Prefeitura", "Plantas atualizadas com layout real"]},
+    "Alvará de Obra": {"dias": 180, "risco": "ALTO", "link": "", "tarefas": ["Manter no canteiro de obras", "Placa do Engenheiro Responsável", "ART de Execução de Obra"]},
+    "SDR": {"dias": 365, "risco": "NORMAL", "link": "https://www.google.com/search?q=secretaria+desenvolvimento+regional+licenca", "tarefas": ["Verificar pendências regionais", "Atualizar cadastro"]},
+    "SMOP": {"dias": 365, "risco": "NORMAL", "link": "https://www.google.com/search?q=secretaria+municipal+obras+publicas+licenca", "tarefas": ["Verificar regularidade de obras", "Certificado de conclusão"]},
+    "Certificado de acessibilidade": {"dias": 0, "risco": "MÉDIO", "link": "", "tarefas": ["Laudo de acessibilidade (NBR 9050)", "Rampas e banheiros adaptados sinalizados"]},
+    "Certificado de Manutenção do Sistema de Segurança": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Laudo das câmeras/CFTV", "Teste de alarme de pânico", "Manutenção de cercas elétricas"]},
+    "Termo de aceite de sinalização de vaga para deficiente e idoso": {"dias": 0, "risco": "BAIXO", "link": "", "tarefas": ["Pintura de solo visível", "Placa vertical instalada"]},
+    "Carta de anuência tombamento": {"dias": 0, "risco": "MÉDIO", "link": "", "tarefas": ["Verificar restrições de fachada", "Autorização para reformas"]},
+
+    # --- POLÍCIA E FORÇAS ---
+    "Polícia Civil (Licença)": {"dias": 365, "risco": "ALTO", "link": "https://www.google.com/search?q=policia+civil+produtos+controlados+licenca", "tarefas": ["Relatório trimestral", "Vistoria local armazenamento", "Taxa fiscalização"]},
+    "Polícia Civil (Termo de Vistoria)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Agendar vistoria", "Livro de registro atualizado"]},
+    "Polícia Federal (Licença)": {"dias": 365, "risco": "ALTO", "link": "https://servicos.dpf.gov.br/sifep-consulta-licencas/", "tarefas": ["Mapas mensais produtos químicos", "Renovação CRC/CLF", "Controle de estoque rigoroso"]},
+    "Licença do Comando da Aeronáutica (COMAER)": {"dias": 1095, "risco": "ALTO", "link": "https://www.gov.br/comaer/pt-br", "tarefas": ["Aprovação do AGA (Área de Gerenciamento)", "Sinalização de topo de prédio (se houver heliponto)"]},
+
+    # --- CONSELHOS DE CLASSE (Profissionais e Serviços) ---
+    "Conselho de Medicina (CRM)": {"dias": 365, "risco": "ALTO", "link": "https://portal.cfm.org.br/busca-medicos/", "tarefas": ["Renovar Certificado de Regularidade", "Atualizar lista corpo clínico", "Anuidade PJ paga", "Diretor Técnico validado"]},
+    "Conselho de Enfermagem (COREN)": {"dias": 365, "risco": "ALTO", "link": "http://www.cofen.gov.br/", "tarefas": ["Emitir CRT (Certidão Resp. Técnica)", "Dimensionamento de Enfermagem", "Escala mensal assinada"]},
+    "Conselho de Farmácia (CRF)": {"dias": 365, "risco": "ALTO", "link": "https://www.cff.org.br/", "tarefas": ["Certidão de Regularidade Técnica", "Farmacêutico presente integralmente", "Baixa de responsabilidade anterior"]},
+    "Conselho de Odontologia (CRO)": {"dias": 365, "risco": "ALTO", "link": "https://website.cfo.org.br/", "tarefas": ["Inscrição de EPAO (Entidade Prestadora)", "Resp. Técnico Dentista"]},
+    "Conselho de Biomedicina (CRBM)": {"dias": 365, "risco": "ALTO", "link": "https://cfbiomedicina.org.br/", "tarefas": ["Registro da PJ", "Biomédico RT cadastrado"]},
+    "Conselho de Biologia (CRBio)": {"dias": 365, "risco": "MÉDIO", "link": "https://cfbio.gov.br/", "tarefas": ["Registro PJ", "TRT (Termo de Resp. Técnica)"]},
+    "Conselho de Nutrição (CRN)": {"dias": 365, "risco": "MÉDIO", "link": "https://www.cfn.org.br/", "tarefas": ["CRQ (Quadro Técnico)", "Manual de Boas Práticas Nutrição"]},
+    "Conselho de Psicologia (CRP)": {"dias": 365, "risco": "MÉDIO", "link": "https://site.cfp.org.br/", "tarefas": ["Cadastro PJ", "Psicólogo RT indicado"]},
+    "Conselho de Radiologia (CRTR)": {"dias": 365, "risco": "ALTO", "link": "http://conter.gov.br/", "tarefas": ["Supervisor de Proteção Radiológica", "Lista de técnicos"]},
+    "Conselho de Fisioterapia e Terapia Ocupacional (CREFITO)": {"dias": 365, "risco": "MÉDIO", "link": "https://www.coffito.gov.br/", "tarefas": ["DRF (Declaração de Regularidade)", "Responsável Técnico Fisioterapeuta"]},
+    "Conselho de Fonoaudiologia (CREFONO)": {"dias": 365, "risco": "MÉDIO", "link": "https://www.fonoaudiologia.org.br/", "tarefas": ["Registro de Pessoa Jurídica", "Fonoaudiólogo RT"]},
+
+    # --- SERVIÇOS ESPECÍFICOS (Vigilância e Conselhos) ---
+    "Licença Sanitária Serviço (Farmácia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Controle de temperatura (geladeira/ambiente)", "Livro de controlados (SNGPC)", "Qualificação de fornecedores"]},
+    "Licença Sanitária Serviço (Laboratório)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Controle de Qualidade Interno/Externo (PNCQ/PELM)", "Calibração de pipetas/equipamentos", "PGRSS (Resíduos Químicos/Biológicos)"]},
+    "Licença Sanitária Serviço (Radiologia)": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=portaria+453+anvisa+radiologia", "tarefas": ["Levantamento Radiométrico (LRA)", "Testes de Constância/Qualidade", "Dosimetria mensal funcionários", "Memorial descritivo de blindagem"]},
+    "Licença Sanitária Serviço (Tomografia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Testes de aceitação/estado", "Programa de Garantia de Qualidade", "Laudo físico-médico"]},
+    "Licença Sanitária (Tomografia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Testes de aceitação/estado", "Programa de Garantia de Qualidade", "Laudo físico-médico"]},
+    "Licença Sanitária Serviço (Ultrassom)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Manutenção preventiva", "Controle de infecção (transdutores)"]},
+    "Licença Sanitária Serviço (Hemoterapia)": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=rdc+hemoterapia+anvisa", "tarefas": ["Validação da Rede de Frio", "Controle de Qualidade de Hemocomponentes", "Comitê Transfusional atuante"]},
+    "Licença Sanitária Serviço (Ag. Transfusional)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Controle de temperatura geladeiras", "Registro de transfusões", "Notificação de reações (Hemovigilância)"]},
+    "Licença Sanitária Serviço (Banco de Sangue)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Ciclo do sangue completo", "Triagem clínica/sorológica", "Descarte seguro"]},
+    "Licença Sanitária Serviço (Hemodiálise)": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=rdc+dialise+anvisa", "tarefas": ["Análise da água (mensal/semestral)", "Manutenção das máquinas", "Sorologia de pacientes (Hepatite/HIV)"]},
+    "Licença Sanitária Serviço (Quimioterapia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Cabine de Segurança Biológica (Fluxo Laminar)", "Kit de derramamento", "Protocolos de manipulação"]},
+    "Licença Sanitária Serviço (Oncologia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Protocolos clínicos", "Registro de câncer"]},
+    "Licença Sanitária Serviço (UTI Adulto)": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=rdc+7+uti+anvisa", "tarefas": ["Equipamentos beira-leito (Monitores/Ventiladores)", "Equipe multidisciplinar completa", "CCIH ativa"]},
+    "Licença Sanitária Serviço (UTI Neonatal)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Incubadoras calibradas", "Protocolo de reanimação neonatal", "Controle de ruído/luminosidade"]},
+    "Licença Sanitária Serviço (UTI Pediátrica)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Materiais tamanho pediátrico", "Presença de acompanhante", "Equipe especializada"]},
+    "Licença Sanitária Serviço (UTI Mista)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Separação de fluxos", "Equipamentos adequados para ambos públicos"]},
+    "Licença Sanitária Serviço (Cozinha/Nutrição)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Coleta de amostras de refeições", "Exames manipuladores de alimentos", "Controle temperatura alimentos", "Limpeza exaustores"]},
+    "Licença Sanitária Serviço (Endoscopia)": {"dias": 365, "risco": "ALTO", "link": "https://www.google.com/search?q=rdc+6+endoscopia+anvisa", "tarefas": ["Rastreabilidade de processamento", "Testes biológicos na desinfecção", "Armazenamento vertical dos escopos"]},
+    "Licença Sanitária Serviço (Centro Cirúrgico)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Controle de temperatura/umidade", "Filtros HEPA", "Manutenção focos/mesas", "Fluxo unidirecional"]},
+    "Licença Sanitária Serviço (CME)": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=rdc+15+cme+anvisa", "tarefas": ["Testes de autoclave (Biológico/Químico)", "Qualificação térmica (anual)", "Rastreabilidade material esterilizado"]},
+    "Licença Sanitária Serviço (Ambulância)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Checklist diário da viatura", "Higienização terminal", "Oxigênio medicinal", "Maleta de urgência"]},
+    "Licença Sanitária Serviço (Remoção de pacientes)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Documento do veículo", "Curso de condutor socorrista"]},
+    "Licença Sanitária Serviço (Vacinas)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Controle rigoroso de temperatura", "Gerador de energia/Nobreak", "Contrato de descarte de resíduos", "Câmara fria validada"]},
+    "Licença Sanitária Serviço (Transplante de Medula Óssea)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Credenciamento SNT", "Quartos com pressão positiva/filtro HEPA", "Equipe TMO"]},
+    "Licença Sanitária Serviço (Transplante de Fígado)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Credenciamento SNT", "Protocolos cirúrgicos e pós-op", "Equipe de plantão"]},
+    "Licença Sanitária Serviço (Transplante de Rim)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Credenciamento SNT", "Suporte de diálise", "Protocolos de imunossupressão"]},
+    "Licença Sanitária Serviço (Transplante Musculo Esquelético)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Banco de tecidos", "Rastreabilidade"]},
+    "Licença Sanitária Serviço (Captação)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["CIHDOTT ativa", "Protocolo de morte encefálica"]},
+    
+    # --- EQUIPAMENTOS ESPECÍFICOS (Agrupados para facilitar) ---
+    "Licença Sanitária Serviço (Equipamento)": {"dias": 365, "risco": "MÉDIO", "link": "https://www.google.com/search?q=gestao+equipamentos+hospitalares+anvisa", "tarefas": ["Manutenção Preventiva", "Calibração", "Teste de segurança elétrica", "Etiqueta de validade visível"]},
+    "Cadastro de tanques, bombas e equipamentos afins": {"dias": 1825, "risco": "ALTO", "link": "", "tarefas": ["Teste de estanqueidade", "Limpeza de tanques", "Licença ambiental específica"]},
+    "Licença Sanitária Serviço (Registro gráfico, ECG. EEG)": {"dias": 365, "risco": "BAIXO", "link": "", "tarefas": ["Calibração do equipamento", "Laudos assinados por especialista"]},
+    
+    # --- PADRÃO PARA ITENS GENÉRICOS ---
+    "DEFAULT": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Verificar validade do documento", "Digitalizar comprovante", "Agendar renovação"]}
 }
 
-# Lista completa para o dropdown
-LISTA_TIPOS_DOCUMENTOS = sorted(list(set([
+# Adiciona lógica genérica para todos os "Equipamento X" ou itens repetidos
+for i in range(1, 25): # Cobre Equipamento 1 até 22+
+    DOC_INTELLIGENCE[f"Licença Sanitária Serviço (Equipamento {i})"] = DOC_INTELLIGENCE["Licença Sanitária Serviço (Equipamento)"]
+
+# Lista completa para o dropdown (a partir das chaves do dicionário + lista original para garantir)
+LISTA_TIPOS_DOCUMENTOS = sorted(list(set(list(DOC_INTELLIGENCE.keys()) + [
     "Licença de Publicidade", "Conselho de Medicina (CRM)", "Conselho de Farmácia (CRF)", "Licença Sanitária",
     "Conselho de Enfermagem (COREN)", "CNES", "Inscrição Municipal", "Licença Ambiental", "Alvará de Funcionamento",
     "Corpo de Bombeiros", "Polícia Civil (Termo de Vistoria)", "Polícia Civil (Licença)", "Conselho de Biomedicina (CRBM)",
@@ -167,7 +191,19 @@ def normalizar_texto(texto):
 
 def aplicar_inteligencia_doc(tipo_doc, data_base=None):
     if not data_base: data_base = date.today()
-    info = DOC_INTELLIGENCE.get(tipo_doc, {"dias": 0, "risco": "NORMAL", "link": "", "tarefas": []})
+    
+    # Busca exata ou por palavra chave
+    info = DOC_INTELLIGENCE.get(tipo_doc)
+    
+    if not info:
+        # Tenta encontrar algo parecido se não achar exato (Ex: Equipamento 5 -> Equipamento)
+        for chave, dados in DOC_INTELLIGENCE.items():
+            if chave in tipo_doc:
+                info = dados
+                break
+    
+    if not info:
+        info = DOC_INTELLIGENCE["DEFAULT"]
     
     novo_vencimento = data_base
     if info["dias"] > 0:
@@ -175,15 +211,15 @@ def aplicar_inteligencia_doc(tipo_doc, data_base=None):
         
     return info["risco"], novo_vencimento, info["link"], info["tarefas"]
 
-# FUNÇÃO PARA ADICIONAR TAREFAS SUGERIDAS AO CHECKLIST
 def adicionar_tarefas_sugeridas(df_checklist, id_doc, tarefas):
     novas = []
-    # Verifica se a tarefa já existe para não duplicar
-    existentes = df_checklist[df_checklist['Documento_Ref'] == id_doc]['Tarefa'].tolist()
+    existentes = []
+    if not df_checklist.empty:
+        existentes = df_checklist[df_checklist['Documento_Ref'] == str(id_doc)]['Tarefa'].tolist()
     
     for t in tarefas:
         if t not in existentes:
-            novas.append({"Documento_Ref": id_doc, "Tarefa": t, "Feito": False})
+            novas.append({"Documento_Ref": str(id_doc), "Tarefa": t, "Feito": False})
     
     if novas:
         return pd.concat([df_checklist, pd.DataFrame(novas)], ignore_index=True)
@@ -415,7 +451,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v40.1 - Inteligência Reativa")
+    st.caption("v41.0 - Knowledge Base Expandida")
 
 # --- ROBÔ INTELIGENTE V2 ---
 try:
@@ -666,10 +702,8 @@ elif menu == "Gestão de Docs":
 
                 novo_nome_doc = c_tit.selectbox("Tipo de Documento", options=opcoes_docs, index=idx_atual, key=f"nome_doc_{doc_ativo_id}")
                 
-                # --- INTELIGÊNCIA REATIVA: MOSTRA BOTÕES BASEADOS NO DROPDOWN ---
                 _, _, link_inteligente, tarefas_inteligentes = aplicar_inteligencia_doc(novo_nome_doc)
                 
-                # Botão de Salvar (se mudou o nome)
                 if novo_nome_doc != doc_nome:
                      if c_edit_btn.button("Salvar Tipo"):
                         antigo_id = doc_ativo_id
@@ -692,7 +726,6 @@ elif menu == "Gestão de Docs":
 
                 st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
                 
-                # --- LINK INTELIGENTE (AGORA REATIVO) ---
                 if link_inteligente:
                     st.link_button(f"🌎 Pesquisar {novo_nome_doc}", link_inteligente)
                 
@@ -750,8 +783,6 @@ elif menu == "Gestão de Docs":
                 mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
                 df_t = df_checklist[mask].copy().reset_index(drop=True)
                 
-                # --- CHECKLIST INTELIGENTE REATIVO ---
-                # Verifica se há novas tarefas sugeridas que não estão na lista atual
                 tarefas_existentes = df_t['Tarefa'].tolist()
                 ha_novas_sugestoes = any(t for t in tarefas_inteligentes if t not in tarefas_existentes)
                 
