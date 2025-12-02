@@ -13,9 +13,7 @@ import requests
 import streamlit.components.v1 as components
 import pytz
 import io
-# --- IMPORTAÇÃO QUE FALTAVA ---
-from streamlit_option_menu import option_menu 
-# --- IMPORTAÇÃO QUE FALTAVA ---
+from streamlit_option_menu import option_menu # Menu Premium
 
 # Tenta importar Plotly
 try:
@@ -29,7 +27,7 @@ except ImportError:
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
 
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
-INTERVALO_GERAL = 60 
+INTERVALO_GERAL = 120 # 2 horas
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ" 
 
 # --- AUTO-REFRESH ---
@@ -41,7 +39,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES AUXILIARES ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -62,12 +60,15 @@ st.markdown("""
         padding: 15px; border-radius: 10px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
+    /* Barra de Progresso VERDE */
+    .stProgress > div > div > div > div { background-color: #00c853; }
+    
+    /* Botões */
     .stButton>button {
         border-radius: 8px; font-weight: 600; text-transform: uppercase;
         background-image: linear-gradient(to right, #2563eb, #1d4ed8);
         border: none; color: white;
     }
-    .stProgress > div > div > div > div { background-color: #00c853; }
     [data-testid="stDataFrame"] { width: 100%; }
 </style>
 """, unsafe_allow_html=True)
@@ -132,8 +133,7 @@ def carregar_tudo():
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
             df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
-        if df_check.empty: 
-            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+        if df_check.empty: df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
         else:
             df_check['Documento_Ref'] = df_check['Documento_Ref'].astype(str)
             df_check = df_check[df_check['Tarefa'] != ""]
@@ -184,16 +184,34 @@ def salvar_vistoria_db(lista_itens):
         header = ws.row_values(1)
         if "Foto_Link" not in header: ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data", "Foto_Link"])
         hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y")
-        prog = st.progress(0, "Salvando...")
+        progresso = st.progress(0, text="Salvando fotos...")
         for i, item in enumerate(lista_itens):
-            link = ""
+            link_foto = ""
             if item.get('Foto_Binaria'):
-                nome = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
-                link = upload_foto_drive(item['Foto_Binaria'], nome)
-            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link])
-            prog.progress((i+1)/len(lista_itens))
-        prog.empty()
+                nome_arq = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
+                item['Foto_Binaria'].seek(0)
+                link_foto = upload_foto_drive(item['Foto_Binaria'], nome_arq)
+            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link_foto if link_foto else "FALHA_UPLOAD"])
+            progresso.progress((i + 1) / len(lista_itens))
+        progresso.empty()
+        st.toast("✅ Vistoria Registrada!", icon="☁️")
     except Exception as e: st.error(f"Erro: {e}")
+
+def salvar_historico_editado(df_editado, data_selecionada):
+    try:
+        sh = conectar_gsheets()
+        ws = sh.worksheet("Vistorias")
+        todos_dados = pd.DataFrame(ws.get_all_records())
+        todos_dados = todos_dados[todos_dados['Data'] != data_selecionada]
+        df_editado['Data'] = data_selecionada
+        todos_dados = pd.concat([todos_dados, df_editado], ignore_index=True)
+        ws.clear()
+        ws.update([todos_dados.columns.values.tolist()] + todos_dados.values.tolist())
+        st.toast("Histórico Atualizado!")
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar histórico: {e}")
+        return False
 
 def carregar_historico_vistorias():
     try:
@@ -244,7 +262,7 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     
-    # MENU PRINCIPAL (CORRIGIDO)
+    # MENU PRINCIPAL
     menu = option_menu(
         menu_title=None,
         options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"],
@@ -260,7 +278,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v28.0 - Final Fix")
+    st.caption("v29.0 - Final UI")
 
 # --- ROBÔ ---
 try:
@@ -268,6 +286,8 @@ try:
     diff = (agora - st.session_state['ultima_notificacao']).total_seconds() / 60
     df_alertas = st.session_state.get('dados_cache', [None])[0]
     if df_alertas is None and diff >= INTERVALO_GERAL: df_alertas, _ = carregar_tudo()
+    
+    # LÓGICA DO ALERTA (CORRIGIDA)
     if df_alertas is not None and diff >= INTERVALO_GERAL:
         lista_alerta = []
         hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).date()
@@ -275,29 +295,54 @@ try:
             try:
                 dias = (row['Vencimento'] - hoje).days
                 prog = safe_prog(row['Progresso'])
-                if dias < 0 and prog < 100: lista_alerta.append(f"⛔ ATRASADO: {row['Documento']}")
-                elif dias <= 5 and prog < 100: lista_alerta.append(f"⚠️ VENCE EM {dias} DIAS: {row['Documento']}")
+                
+                # SÓ NOTIFICA SE O STATUS FOR ALTO OU CRÍTICO (Manual) OU SE O PRAZO VENCEU
+                if row['Status'] in ["ALTO", "CRÍTICO"] and prog < 100:
+                    status_alerta = f"{row['Status']} (Manual)"
+                    lista_alerta.append({
+                        "doc": row['Documento'],
+                        "status": status_alerta,
+                        "unidade": row['Unidade'],
+                        "setor": row['Setor']
+                    })
+                elif dias <= 5 and prog < 100 and row['Status'] != "CRÍTICO": # Crítico já foi pego
+                    status_alerta = f"PRAZO PRÓXIMO"
+                    lista_alerta.append({
+                        "doc": row['Documento'],
+                        "status": status_alerta,
+                        "unidade": row['Unidade'],
+                        "setor": row['Setor']
+                    })
             except: pass
+        
         if lista_alerta:
-            msg = "\n".join(lista_alerta[:5])
-            if len(lista_alerta) > 5: msg += "\n..."
-            enviar_notificacao_push(f"🚨 ALERTAS", msg, "high")
+            msg_push = "Lista de Pendências:\n\n"
+            for p in lista_alerta[:5]:
+                msg_push += f"- {p['unidade']} ({p['setor']}) - {p['doc']} - Risco: {p['status']}\n"
+            if len(lista_alerta) > 5: msg_push += f"...e mais {len(lista_alerta) - 5} itens."
+            
+            enviar_notificacao_push(f"🚨 {len(lista_alerta)} ALERTAS ATIVOS", msg_push, "high")
             st.session_state['ultima_notificacao'] = agora
             st.toast("🤖 Alertas enviados!")
 except: pass
 
 # --- TELAS ---
 
-if menu == "Painel Geral":
+if menu == "Painel de Controle":
     st.title("Painel de Controle Estratégico")
     if 'dados_cache' in st.session_state: df_p = st.session_state['dados_cache'][0]
     else: df_p, _ = carregar_tudo()
+    
+    # Recalcula IDs (Para garantir que os botões funcionem após o refresh)
+    df_p = df_p.copy()
+    df_p['ID_UNICO'] = df_p['Unidade'] + " - " + df_p['Documento']
     
     n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
     
     c1, c2, c3, c4 = st.columns(4)
+    # Botões Clicáveis
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
     if c3.button(f"🟢 NORMAL: {n_norm}", use_container_width=True): st.session_state['filtro_dash'] = "NORMAL"
@@ -305,7 +350,7 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    col_graf, col_tab = st.columns([1, 1.5])
+    col_lista, col_graf = st.columns([1.5, 1]) # Reorganiza para Tabela maior
     
     with col_graf:
         st.subheader("Panorama")
@@ -320,21 +365,23 @@ if menu == "Painel Geral":
             st.metric("Progresso Geral", f"{media}%")
             st.progress(media)
 
-    with col_tab:
+    with col_lista:
         f_atual = st.session_state['filtro_dash']
-        st.subheader(f"Lista: {f_atual}")
+        st.subheader(f"Lista de Processos: {f_atual}")
         df_show = df_p.copy()
         if f_atual != "TODOS":
             df_show = df_show[df_show['Status'] == f_atual]
             
         if not df_show.empty:
+            # Tabela Limpa (Sem índice)
             st.dataframe(
-                df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Status']], 
+                df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], 
                 use_container_width=True, 
                 hide_index=True,
                 column_config={
                     "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
-                    "Status": st.column_config.TextColumn("Risco", width="small")
+                    "Status": st.column_config.TextColumn("Risco", width="small"),
+                    "Progresso": st.column_config.ProgressColumn("Progresso", format="%d%%")
                 }
             )
         else:
@@ -506,10 +553,11 @@ elif menu == "Relatórios":
     st.title("Relatórios")
     tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
     with tab1:
-        if st.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
+        # AVISO SOBRE FOTO: A foto só aparecerá se o PDF for baixado na hora.
+        if st.button("☁️ Salvar Nuvem (Vistoria)"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
         if len(st.session_state['vistorias']) > 0:
             pdf = gerar_pdf(st.session_state['vistorias'])
-            st.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
+            st.download_button("📥 Baixar PDF (Com Fotos)", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
     with tab2:
         try:
             sh = conectar_gsheets()
@@ -518,8 +566,15 @@ elif menu == "Relatórios":
             if not df_h.empty:
                 sel = st.selectbox("Data:", df_h['Data'].unique())
                 df_f = df_h[df_h['Data'] == sel]
-                st.dataframe(df_f, use_container_width=True, hide_index=True)
-                if st.button(f"📥 Baixar PDF"):
+                
+                st.info("Edite ou exclua linhas abaixo e clique em Salvar Correções.")
+                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
+                
+                c_save, c_down = st.columns(2)
+                if c_save.button("💾 Salvar Correções no Histórico"):
+                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
+                
+                if c_down.button(f"📥 Baixar PDF Histórico"):
                     pdf = gerar_pdf(df_f.to_dict('records'))
                     st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
         except: st.error("Sem histórico.")
