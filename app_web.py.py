@@ -65,9 +65,8 @@ st.markdown("""
         border: none; color: white;
     }
     .stProgress > div > div > div > div { background-color: #00c853; }
-    
-    /* Layouts Mobile-First */
-    [data-testid="stDataFrame"] { width: 100%; }
+    /* Estilo de tabela mais limpo */
+    [data-testid="stDataFrame"] { width: 100%; border-radius: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -189,7 +188,7 @@ def salvar_vistoria_db(lista_itens):
                 nome_arq = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
                 item['Foto_Binaria'].seek(0)
                 link_foto = upload_foto_drive(item['Foto_Binaria'], nome_arq)
-            ws.append_row([item['Setor'], item['Item'], item['Situacao'], item['Gravidade'], item['Obs'], hoje, link_foto if link_foto else "FALHA_UPLOAD"])
+            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link_foto if link_foto else "FALHA_UPLOAD"])
             progresso.progress((i + 1) / len(lista_itens))
         progresso.empty()
         st.toast("✅ Vistoria Registrada!", icon="☁️")
@@ -227,8 +226,8 @@ def limpar_txt(t):
     return t.encode('latin-1', 'replace').decode('latin-1')
 def baixar_imagem_url(url):
     try:
-        resp = requests.get(url, timeout=10)
-        if resp.status_code == 200: return io.BytesIO(resp.content)
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200: return io.BytesIO(response.content)
     except: pass
     return None
 def gerar_pdf(vistorias):
@@ -260,6 +259,7 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     
+    # MENU PRINCIPAL
     menu = option_menu(
         menu_title=None,
         options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"],
@@ -275,7 +275,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v29.0 - Final Build")
+    st.caption("v30.0 - Mobile Final")
 
 # --- ROBÔ ---
 try:
@@ -290,11 +290,10 @@ try:
             try:
                 dias = (row['Vencimento'] - hoje).days
                 prog = safe_prog(row['Progresso'])
-                # LÓGICA DE ALERTA: SÓ ALERTA SE FOR ALTO/CRÍTICO E PROGRESSO < 100
                 if row['Status'] in ["ALTO", "CRÍTICO"] and prog < 100:
                     status_alerta = f"{row['Status']} (Manual)"
                     lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
-                elif dias <= 5 and prog < 100 and row['Status'] not in ["CRÍTICO", "ALTO"]: # Alerta por data se não for manual
+                elif dias <= 5 and prog < 100 and row['Status'] not in ["CRÍTICO", "ALTO"]:
                     status_alerta = f"PRAZO PRÓXIMO"
                     lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
             except: pass
@@ -314,22 +313,15 @@ except: pass
 
 if menu == "Painel Geral":
     st.title("Painel de Controle Estratégico")
-    
-    # GARANTE RECARREGAMENTO SE ESTIVER VAZIO
     if 'dados_cache' in st.session_state: df_p = st.session_state['dados_cache'][0]
     else: df_p, _ = carregar_tudo()
     
-    if df_p.empty:
-        st.warning("Ainda não há documentos cadastrados. Adicione na aba 'Gestão de Docs'.")
-        st.stop() # PÁGINA VAZIA, NÃO TENTA CALCULAR
-
     # Indicadores
     n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
     
-    # Layout Mobile: KPIs empilhados, Tabela e Gráfico empilhados.
-    
+    # LAYOUT MOBILE: KPIs em 4 colunas em telas grandes, empilhados em pequenas
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
@@ -338,42 +330,46 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # 1. TABELA DE ALERTA (ACIMA DO GRÁFICO NO MOBILE)
-    col_tab, col_graf = st.columns([1.5, 1])
+    # LAYOUT VERTICAL
     
-    with col_tab:
-        f_atual = st.session_state['filtro_dash']
-        st.subheader(f"Lista de Processos: {f_atual}")
-        df_show = df_p.copy()
-        if f_atual != "TODOS":
-            df_show = df_show[df_show['Status'] == f_atual]
-            
-        if not df_show.empty:
-            st.dataframe(
-                df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Status']], 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
-                    "Status": st.column_config.TextColumn("Risco", width="small")
-                }
-            )
-        else:
-            st.info("Nenhum item neste status.")
+    # 1. VISUAL GERAL
+    with st.container(border=True):
+        col_list, col_graf = st.columns([1.5, 1])
+        
+        with col_list:
+            f_atual = st.session_state['filtro_dash']
+            st.subheader(f"Lista de Processos: {f_atual}")
+            df_show = df_p.copy()
+            if f_atual != "TODOS":
+                df_show = df_show[df_show['Status'] == f_atual]
+                
+            if not df_show.empty:
+                st.dataframe(
+                    df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Status']], 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
+                        "Status": st.column_config.TextColumn("Risco", width="small")
+                    }
+                )
+            else:
+                st.info("Nenhum item neste status.")
 
-    # 2. GRÁFICO (AO LADO DA TABELA SE COUBER)
-    with col_graf:
-        st.subheader("Panorama")
-        if not df_p.empty and TEM_PLOTLY:
-            status_counts = df_p['Status'].value_counts()
-            fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
-                color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
-            fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
-            st.plotly_chart(fig, use_container_width=True)
-            
-            media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
-            st.metric("Progresso Geral", f"{media}%")
-            st.progress(media)
+        with col_graf:
+            st.subheader("Panorama")
+            if not df_p.empty and TEM_PLOTLY:
+                status_counts = df_p['Status'].value_counts()
+                fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
+                    color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
+                fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
+                st.plotly_chart(fig, use_container_width=True)
+                
+                media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
+                st.metric("Progresso Geral", f"{media}%")
+                st.progress(media)
+        
+    st.markdown("---")
 
 elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
