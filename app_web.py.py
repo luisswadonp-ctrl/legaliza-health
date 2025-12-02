@@ -178,8 +178,12 @@ def aplicar_inteligencia_doc(tipo_doc, data_base=None):
 # FUNÇÃO PARA ADICIONAR TAREFAS SUGERIDAS AO CHECKLIST
 def adicionar_tarefas_sugeridas(df_checklist, id_doc, tarefas):
     novas = []
+    # Verifica se a tarefa já existe para não duplicar
+    existentes = df_checklist[df_checklist['Documento_Ref'] == id_doc]['Tarefa'].tolist()
+    
     for t in tarefas:
-        novas.append({"Documento_Ref": id_doc, "Tarefa": t, "Feito": False})
+        if t not in existentes:
+            novas.append({"Documento_Ref": id_doc, "Tarefa": t, "Feito": False})
     
     if novas:
         return pd.concat([df_checklist, pd.DataFrame(novas)], ignore_index=True)
@@ -411,7 +415,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v40.0 - Checklist Automático")
+    st.caption("v40.1 - Inteligência Reativa")
 
 # --- ROBÔ INTELIGENTE V2 ---
 try:
@@ -566,14 +570,12 @@ elif menu == "Gestão de Docs":
                 n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.selectbox("Documento", options=LISTA_TIPOS_DOCUMENTOS); n_c = st.text_input("CNPJ")
                 if st.form_submit_button("ADICIONAR"):
                     if n_u and n_d and n_c:
-                        # APLICA INTELIGÊNCIA AO CRIAR
                         risco_sug, venc_sug, link_sug, tarefas_sug = aplicar_inteligencia_doc(n_d)
                         
                         novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": venc_sug, "Status": risco_sug, "Progresso": 0, "Concluido": "False"}
                         df_temp = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
                         df_temp['ID_UNICO'] = df_temp['Unidade'] + " - " + df_temp['Documento']
                         
-                        # --- ADICIONA TAREFAS SUGERIDAS AUTOMATICAMENTE ---
                         if tarefas_sug:
                             df_checklist = adicionar_tarefas_sugeridas(df_checklist, df_temp['ID_UNICO'].iloc[0], tarefas_sug)
                         
@@ -664,14 +666,17 @@ elif menu == "Gestão de Docs":
 
                 novo_nome_doc = c_tit.selectbox("Tipo de Documento", options=opcoes_docs, index=idx_atual, key=f"nome_doc_{doc_ativo_id}")
                 
+                # --- INTELIGÊNCIA REATIVA: MOSTRA BOTÕES BASEADOS NO DROPDOWN ---
+                _, _, link_inteligente, tarefas_inteligentes = aplicar_inteligencia_doc(novo_nome_doc)
+                
+                # Botão de Salvar (se mudou o nome)
                 if novo_nome_doc != doc_nome:
                      if c_edit_btn.button("Salvar Tipo"):
                         antigo_id = doc_ativo_id
                         nova_unidade = df_prazos.at[idx, 'Unidade']
                         cnpj_atual = df_prazos.at[idx, 'CNPJ']
                         
-                        # --- APLICA INTELIGÊNCIA AO MUDAR O NOME ---
-                        risco_sug, venc_sug, link_sug, tarefas_sug = aplicar_inteligencia_doc(novo_nome_doc, df_prazos.at[idx, 'Data_Recebimento'])
+                        risco_sug, venc_sug, _, _ = aplicar_inteligencia_doc(novo_nome_doc, df_prazos.at[idx, 'Data_Recebimento'])
                         df_prazos.at[idx, 'Status'] = risco_sug
                         df_prazos.at[idx, 'Vencimento'] = venc_sug
                         
@@ -687,10 +692,9 @@ elif menu == "Gestão de Docs":
 
                 st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
                 
-                # --- LINK INTELIGENTE ---
-                _, _, link_inteligente, tarefas_inteligentes = aplicar_inteligencia_doc(doc_nome)
+                # --- LINK INTELIGENTE (AGORA REATIVO) ---
                 if link_inteligente:
-                    st.link_button(f"🌎 Pesquisar {doc_nome} no Google", link_inteligente)
+                    st.link_button(f"🌎 Pesquisar {novo_nome_doc}", link_inteligente)
                 
                 c_del, _ = st.columns([1, 4])
                 if c_del.button("🗑️ Excluir"):
@@ -738,16 +742,20 @@ elif menu == "Gestão de Docs":
                     prog_bar_placeholder = st.empty()
                     prog_bar_placeholder.progress(prog_atual, text=f"Progressão: {prog_atual}%")
 
-                st.write("✅ **Tarefas**")
-                
-                # --- BOTÃO PARA CARREGAR TAREFAS SUGERIDAS (SE LISTA VAZIA) ---
+                st.write("✅ **Tarefas (Edição Rápida)**")
                 df_checklist['Feito'] = df_checklist['Feito'].replace({'TRUE': True, 'FALSE': False, 'True': True, 'False': False, 'nan': False})
                 df_checklist['Feito'] = df_checklist['Feito'].fillna(False).astype(bool)
+                
                 df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
                 mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
                 df_t = df_checklist[mask].copy().reset_index(drop=True)
                 
-                if df_t.empty and tarefas_inteligentes:
+                # --- CHECKLIST INTELIGENTE REATIVO ---
+                # Verifica se há novas tarefas sugeridas que não estão na lista atual
+                tarefas_existentes = df_t['Tarefa'].tolist()
+                ha_novas_sugestoes = any(t for t in tarefas_inteligentes if t not in tarefas_existentes)
+                
+                if ha_novas_sugestoes:
                     if st.button("📥 Carregar Checklist Sugerido", key=f"load_tasks_{doc_ativo_id}"):
                         df_checklist = adicionar_tarefas_sugeridas(df_checklist, doc_ativo_id, tarefas_inteligentes)
                         update_dados_local(df_prazos, df_checklist)
