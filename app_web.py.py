@@ -66,8 +66,7 @@ st.markdown("""
         border: none; color: white;
     }
     .stProgress > div > div > div > div { background-color: #00c853; }
-    /* Layouts Mobile-First: Tabela e Gráfico Empilhados */
-    [data-testid="stDataFrame"] { width: 100%; border-radius: 8px; }
+    [data-testid="stDataFrame"] { width: 100%; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -260,7 +259,6 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     
-    # MENU PRINCIPAL
     menu = option_menu(
         menu_title=None,
         options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"],
@@ -276,7 +274,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v30.0 - Mobile Final")
+    st.caption("v32.0 - Progressão Final")
 
 # --- ROBÔ ---
 try:
@@ -291,22 +289,13 @@ try:
             try:
                 dias = (row['Vencimento'] - hoje).days
                 prog = safe_prog(row['Progresso'])
-                
-                if row['Status'] in ["ALTO", "CRÍTICO"] and prog < 100:
-                    status_alerta = f"{row['Status']} (Manual)"
-                    lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
-                elif dias <= 5 and prog < 100 and row['Status'] not in ["CRÍTICO", "ALTO"]:
-                    status_alerta = f"PRAZO PRÓXIMO"
-                    lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
+                if dias < 0 and prog < 100: lista_alerta.append(f"⛔ ATRASADO: {row['Documento']}")
+                elif dias <= 5 and prog < 100: lista_alerta.append(f"⚠️ VENCE EM {dias} DIAS: {row['Documento']}")
             except: pass
-        
         if lista_alerta:
-            msg_push = "Lista de Pendências:\n\n"
-            for p in lista_alerta[:5]:
-                msg_push += f"- {p['unidade']} ({p['setor']}) - {p['doc']} - Risco: {p['status']}\n"
-            if len(lista_alerta) > 5: msg_push += f"...e mais {len(lista_alerta) - 5} itens."
-            
-            enviar_notificacao_push(f"🚨 {len(lista_alerta)} ALERTAS ATIVOS", msg_push, "high")
+            msg = "\n".join(lista_alerta[:5])
+            if len(lista_alerta) > 5: msg += "\n..."
+            enviar_notificacao_push(f"🚨 ALERTAS", msg, "high")
             st.session_state['ultima_notificacao'] = agora
             st.toast("🤖 Alertas enviados!")
 except: pass
@@ -336,7 +325,7 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # 1. TABELA DE ALERTA (Filtra de acordo com o clique)
+    # 1. TABELA DE ALERTA
     f_atual = st.session_state['filtro_dash']
     st.subheader(f"Lista de Processos: {f_atual}")
     df_show = df_p.copy()
@@ -350,7 +339,7 @@ if menu == "Painel Geral":
             hide_index=True,
             column_config={
                 "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
-                "Progresso": st.column_config.ProgressColumn("Prog", format="%d%%"),
+                "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"), # <--- PROGRESSÃO
                 "Status": st.column_config.TextColumn("Risco", width="small")
             }
         )
@@ -359,7 +348,7 @@ if menu == "Painel Geral":
 
     st.markdown("---")
     
-    # 2. GRÁFICO (Abaixo da Tabela)
+    # 2. GRÁFICO
     st.subheader("Panorama")
     if not df_p.empty and TEM_PLOTLY:
         status_counts = df_p['Status'].value_counts()
@@ -369,7 +358,7 @@ if menu == "Painel Geral":
         st.plotly_chart(fig, use_container_width=True)
         
         media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
-        st.metric("Progresso Geral", f"{media}%")
+        st.metric("Progressão Geral", f"{media}%")
         st.progress(media)
 
 elif menu == "Gestão de Docs":
@@ -467,7 +456,8 @@ elif menu == "Gestão de Docs":
                     df_prazos.at[idx, 'Setor'] = novo_setor
                     
                     prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
-                    st.progress(prog_atual, text=f"Conclusão: {prog_atual}%")
+                    # PROGRESSÃO
+                    st.progress(prog_atual, text=f"Progressão: {prog_atual}%")
 
                 st.write("✅ **Tarefas**")
                 df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
