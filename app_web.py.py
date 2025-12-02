@@ -13,6 +13,9 @@ import requests
 import streamlit.components.v1 as components
 import pytz
 import io
+# --- IMPORTAÇÃO QUE FALTAVA ---
+from streamlit_option_menu import option_menu 
+# --- IMPORTAÇÃO QUE FALTAVA ---
 
 # Tenta importar Plotly
 try:
@@ -82,11 +85,15 @@ def conectar_gsheets():
 def upload_foto_drive(foto_binaria, nome_arquivo):
     if not ID_PASTA_DRIVE: return ""
     try:
-        # A API de upload está sendo BLOQUEADA pelo Google por falta de quota
-        # Usamos apenas o link de erro para o registro, a foto não subirá.
-        return "ERRO_QUOTA_DRIVE" 
+        creds = get_creds()
+        service = build('drive', 'v3', credentials=creds)
+        file_metadata = {'name': nome_arquivo, 'parents': [ID_PASTA_DRIVE]}
+        media = MediaIoBaseUpload(foto_binaria, mimetype='image/jpeg')
+        file = service.files().create(body=file_metadata, media_body=media, fields='id, webContentLink').execute()
+        return file.get('webContentLink', '')
     except Exception as e:
-        return f"ERRO_UPLOAD_{str(e)[:10]}"
+        st.error(f"Erro Drive: {e}")
+        return ""
 
 def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
     try:
@@ -115,6 +122,7 @@ def carregar_tudo():
             
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
+            
             for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ']:
                 df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
             
@@ -124,7 +132,8 @@ def carregar_tudo():
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
             df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
-        if df_check.empty: df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+        if df_check.empty: 
+            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
         else:
             df_check['Documento_Ref'] = df_check['Documento_Ref'].astype(str)
             df_check = df_check[df_check['Tarefa'] != ""]
@@ -175,43 +184,16 @@ def salvar_vistoria_db(lista_itens):
         header = ws.row_values(1)
         if "Foto_Link" not in header: ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data", "Foto_Link"])
         hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y")
-        progresso = st.progress(0, text="Salvando fotos...")
-        
+        prog = st.progress(0, "Salvando...")
         for i, item in enumerate(lista_itens):
-            link_foto = ""
-            # AQUI ESTÁ O WORKAROUND: Tenta salvar a foto, mas se der 403, registra o erro.
+            link = ""
             if item.get('Foto_Binaria'):
-                nome_arq = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
-                item['Foto_Binaria'].seek(0)
-                link_foto = upload_foto_drive(item['Foto_Binaria'], nome_arq)
-            
-            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link_foto if link_foto else "FALHA_UPLOAD"])
-            progresso.progress((i + 1) / len(lista_itens))
-        progresso.empty()
-        st.toast("✅ Vistoria Registrada!", icon="☁️")
+                nome = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
+                link = upload_foto_drive(item['Foto_Binaria'], nome)
+            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link])
+            prog.progress((i+1)/len(lista_itens))
+        prog.empty()
     except Exception as e: st.error(f"Erro: {e}")
-
-def salvar_historico_editado(df_editado, data_selecionada):
-    try:
-        sh = conectar_gsheets()
-        ws = sh.worksheet("Vistorias")
-        todos_dados = pd.DataFrame(ws.get_all_records())
-        
-        # 1. Remove os dados antigos da data selecionada (para deletar ou editar)
-        todos_dados = todos_dados[todos_dados['Data'] != data_selecionada]
-        
-        # 2. Adiciona os novos dados editados
-        df_editado['Data'] = data_selecionada
-        todos_dados = pd.concat([todos_dados, df_editado], ignore_index=True)
-        
-        # 3. Salva tudo de volta
-        ws.clear()
-        ws.update([todos_dados.columns.values.tolist()] + todos_dados.values.tolist())
-        st.toast("Histórico Atualizado!")
-        return True
-    except Exception as e:
-        st.error(f"Erro ao salvar histórico: {e}")
-        return False
 
 def carregar_historico_vistorias():
     try:
@@ -229,8 +211,8 @@ def limpar_txt(t):
     return t.encode('latin-1', 'replace').decode('latin-1')
 def baixar_imagem_url(url):
     try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200: return io.BytesIO(response.content)
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200: return io.BytesIO(resp.content)
     except: pass
     return None
 def gerar_pdf(vistorias):
@@ -262,7 +244,7 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     
-    # MENU PRINCIPAL
+    # MENU PRINCIPAL (CORRIGIDO)
     menu = option_menu(
         menu_title=None,
         options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"],
@@ -278,7 +260,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v28.1 - Final Photo Fix")
+    st.caption("v28.0 - Final Fix")
 
 # --- ROBÔ ---
 try:
@@ -430,7 +412,7 @@ elif menu == "Gestão de Docs":
                     
                     st_curr = df_prazos.at[idx, 'Status']
                     opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
-                    if st_curr not in opcoes: st_curr = "NORMAL" # Garantia de fallback
+                    if st_curr not in opcoes: st_curr = "NORMAL"
 
                     novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
                     
@@ -536,16 +518,8 @@ elif menu == "Relatórios":
             if not df_h.empty:
                 sel = st.selectbox("Data:", df_h['Data'].unique())
                 df_f = df_h[df_h['Data'] == sel]
-                
-                # TABELA EDITÁVEL NO HISTÓRICO
-                st.info("Edite ou exclua linhas abaixo:")
-                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
-                
-                c_save, c_down = st.columns(2)
-                if c_save.button("💾 Salvar Correções"):
-                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
-                
-                if c_down.button(f"📥 Baixar PDF"):
+                st.dataframe(df_f, use_container_width=True, hide_index=True)
+                if st.button(f"📥 Baixar PDF"):
                     pdf = gerar_pdf(df_f.to_dict('records'))
                     st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
         except: st.error("Sem histórico.")
