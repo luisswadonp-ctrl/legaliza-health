@@ -115,17 +115,19 @@ def processar_dados_importados(df_importado_raw):
         'Unidade': ['NOME DA UNIDADE', 'UNIDADE'],
         'CNPJ': ['CNPJ'],
         'Setor': ['SETOR FISCALIZADO', 'SETOR'],
-        'Documento_Nome': ['NOME DO DOCUMENTO', 'DOCUMENTO', 'TIPO DE DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO', 'PROCESSO'],
+        'Documento': ['NOME DO DOCUMENTO', 'DOCUMENTO', 'TIPO DE DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO', 'PROCESSO'],
         'Vencimento': ['DATA LIMITE DE ATENDIMENTO', 'VENCIMENTO', 'SLA ESPERADO'],
         'Data_Recebimento': ['DATA DO DOCUMENTO/RECEBIDO PELA UNIDADE', 'DATA INÍCIO', 'DATA ENVIO PGTO'],
-        'Status_Origem': ['STATUS DO PROCESSO', 'STATUS'],
-        'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO'],
+        'Status': ['STATUS DO PROCESSO', 'STATUS'],
+        'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO'], 
+        'SIGLA': ['SIGLA'],
+        'PROCESSO': ['PROCESSO'],
+        'SDR': ['SDR'],
     }
     
     df_result = pd.DataFrame()
     hoje = date.today()
 
-    # Mapeamento de Colunas
     for col_final, col_candidatas in col_map.items():
         col_encontrada = next((c for c in col_candidatas if c in df.columns), None)
         
@@ -137,16 +139,14 @@ def processar_dados_importados(df_importado_raw):
         else:
             df_result[col_final] = val
             
-    # Limpeza de Documento
-    doc_base = df_result.get('Documento_Nome', pd.Series([''] * len(df_result)))
-    df_result['Documento'] = doc_base.apply(lambda x: x if x else 'Não Definido')
+    # Limpeza e Default
+    df_result['Documento'] = df_result['Documento'].apply(lambda x: x if x else 'Não Definido')
 
-    # Mapeamento de Status
     status_map = {'CONCLUÍDO': 'NORMAL', 'QUITADO': 'NORMAL', 'EM ANDAMENTO': 'ALTO', 'PENDENTE': 'CRÍTICO', 'VENCIDO': 'CRÍTICO', 'EM PGTO': 'ALTO', 'NA': 'NORMAL'}
-    df_result['Status'] = df_result.get('Status_Origem', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
+    df_result['Status'] = df_result.get('Status', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
     
-    # Preenchimento de campos vazios com info amigável (Conforme solicitado)
-    for col in ['Unidade', 'Setor', 'CNPJ', 'Comunicado']:
+    # Preenchimento de campos vazios com info amigável (Não Informado)
+    for col in ['Unidade', 'Setor', 'CNPJ', 'Comunicado', 'SIGLA', 'PROCESSO', 'SDR']:
         if col in df_result.columns:
             df_result[col] = df_result[col].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado', 'NONE': 'Não Informado'})
             
@@ -156,7 +156,7 @@ def processar_dados_importados(df_importado_raw):
     # Limpa linhas sem Unidade ou Documento
     df_result = df_result[(df_result['Unidade'] != 'Não Informado') & (df_result['Documento'] != 'Não Definido')].reset_index(drop=True)
     
-    colunas_finais = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
+    colunas_finais = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado", "SIGLA", "PROCESSO", "SDR"]
     
     df_final = pd.DataFrame()
     for col in colunas_finais:
@@ -182,14 +182,15 @@ def carregar_tudo():
             ws_check.append_row(["Documento_Ref", "Tarefa", "Feito"])
             df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
-        colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
+        # Colunas com os novos campos (Setor, CNPJ, Comunicado, SIGLA, PROCESSO, SDR)
+        colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado", "SIGLA", "PROCESSO", "SDR"]
         for c in colunas:
             if c not in df_prazos.columns: df_prazos[c] = ""
             
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
             
-            for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ', 'Comunicado']:
+            for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ', 'Comunicado', 'SIGLA', 'PROCESSO', 'SDR']:
                 df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
             
             for c_date in ['Vencimento', 'Data_Recebimento']:
@@ -222,7 +223,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_p['Concluido'] = df_p['Concluido'].astype(str)
         df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
         
-        colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
+        colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado", "SIGLA", "PROCESSO", "SDR"]
         for c in colunas_ordem: 
             if c not in df_p.columns: df_p[c] = ""
         df_p = df_p[colunas_ordem]
@@ -343,7 +344,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v35.0 - Final Bugfix")
+    st.caption("v36.0 - Final Import Logic")
 
 # --- ROBÔ ---
 try:
@@ -498,8 +499,6 @@ elif menu == "Gestão de Docs":
                         except Exception as e:
                             st.error(f"Erro ao ler ou processar o arquivo: {e}")
                             st.session_state['df_import_preview'] = pd.DataFrame() 
-                    else:
-                        st.warning("Por favor, carregue um arquivo primeiro.")
 
     with col_d:
         # --- BLOCO DE PRÉ-VISUALIZAÇÃO (Import) ---
