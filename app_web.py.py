@@ -13,6 +13,7 @@ import requests
 import streamlit.components.v1 as components
 import pytz
 import io
+import unicodedata # BIBLIOTECA PARA REMOVER ACENTOS
 from streamlit_option_menu import option_menu
 
 # Tenta importar Plotly
@@ -101,6 +102,12 @@ img_loading = get_img_as_base64("loading.gif")
 def safe_prog(val):
     try: return max(0, min(100, int(float(val))))
     except: return 0
+
+# --- NOVA FUNÇÃO INTELIGENTE: Remove acentos e padroniza ---
+def normalizar_texto(texto):
+    if texto is None: return ""
+    # Converte para string, normaliza para remover acentos e põe em minúsculas
+    return ''.join(c for c in unicodedata.normalize('NFKD', str(texto)) if unicodedata.category(c) != 'Mn').lower()
 
 st.markdown("""
 <style>
@@ -328,7 +335,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v37.0 - Painel com Busca")
+    st.caption("v38.0 - Busca Inteligente")
 
 # --- ROBÔ INTELIGENTE V2 ---
 try:
@@ -399,20 +406,21 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # --- NOVO: BUSCA NO PAINEL ---
-    busca_painel = st.text_input("🔎 Buscar Unidade/Documento", placeholder="Digite o nome da unidade ou documento...")
+    # --- BUSCA INTELIGENTE PAINEL ---
+    busca_painel = st.text_input("🔎 Buscar Unidade/Documento", placeholder="Ex: gravatai, crm, alvara...")
 
     f_atual = st.session_state['filtro_dash']
     st.subheader(f"Lista de Processos: {f_atual}")
     df_show = df_p.copy()
     
-    # 1. Filtro Status
     if f_atual != "TODOS":
         df_show = df_show[df_show['Status'] == f_atual]
         
-    # 2. Filtro Busca (Acumulativo)
     if busca_painel:
-        df_show = df_show[df_show.astype(str).apply(lambda x: x.str.contains(busca_painel, case=False)).any(axis=1)]
+        # Normaliza a busca
+        termo = normalizar_texto(busca_painel)
+        # Filtra buscando em todas as colunas
+        df_show = df_show[df_show.apply(lambda row: termo in normalizar_texto(str(row.values)), axis=1)]
         
     if not df_show.empty:
         st.dataframe(
@@ -451,13 +459,17 @@ elif menu == "Gestão de Docs":
         lista_uni = ["Todas"] + sorted(list(df_prazos['Unidade'].unique())) if 'Unidade' in df_prazos.columns else ["Todas"]
         f_uni = f1.selectbox("Unidade:", lista_uni)
         f_stt = f2.multiselect("Status:", ["CRÍTICO", "ALTO", "NORMAL"])
-        f_txt = f3.text_input("Buscar (Nome/CNPJ/Setor):")
+        f_txt = f3.text_input("Buscar Inteligente (Nome/CNPJ/Setor):")
         if st.button("Limpar"): st.rerun()
 
     df_show = df_prazos.copy()
     if f_uni != "Todas": df_show = df_show[df_show['Unidade'] == f_uni]
     if f_stt: df_show = df_show[df_show['Status'].isin(f_stt)]
-    if f_txt: df_show = df_show[df_show.astype(str).apply(lambda x: x.str.contains(f_txt, case=False)).any(axis=1)]
+    
+    # --- BUSCA INTELIGENTE GESTÃO ---
+    if f_txt:
+        termo = normalizar_texto(f_txt)
+        df_show = df_show[df_show.apply(lambda row: termo in normalizar_texto(str(row.values)), axis=1)]
 
     col_l, col_d = st.columns([1.2, 2])
 
@@ -577,7 +589,6 @@ elif menu == "Gestão de Docs":
                      if c_edit_btn.button("Salvar Tipo"):
                         antigo_id = doc_ativo_id
                         nova_unidade = df_prazos.at[idx, 'Unidade']
-                        # Recria ID com CNPJ para garantir unicidade
                         cnpj_atual = df_prazos.at[idx, 'CNPJ']
                         novo_id = nova_unidade + " - " + cnpj_atual + " - " + novo_nome_doc
                         
