@@ -58,7 +58,7 @@ st.markdown("""
     }
     .stProgress > div > div > div > div { background-color: #00c853; }
     
-    /* Ajuste para tabela não pedir scroll horizontal */
+    /* Ajuste tabela */
     [data-testid="stDataFrame"] { width: 100%; }
 </style>
 """, unsafe_allow_html=True)
@@ -207,11 +207,13 @@ def gerar_pdf(vistorias):
 # --- INTERFACE ---
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
 if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notificacao'] = datetime.min
+# Variável para MEMÓRIA DO DOCUMENTO ABERTO
+if 'doc_focado' not in st.session_state: st.session_state['doc_focado'] = None
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v13.0 - Stable")
+    st.caption("v13.0 - Persistência Total")
     menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -280,104 +282,107 @@ elif menu == "📅 Gestão de Documentos":
                 if novo and novo not in df_prazos['Documento'].values:
                     item = {"Documento": novo, "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
                     df_prazos = pd.concat([pd.DataFrame([item]), df_prazos], ignore_index=True)
-                    # Atualiza Memória e Nuvem Agora
-                    st.session_state['dados_cache'] = (df_prazos, df_checklist)
                     salvar_alteracoes_completo(df_prazos, df_checklist)
+                    st.session_state['dados_cache'] = (df_prazos, df_checklist)
                     st.rerun()
         
         # 2. Lista de Seleção
         st.caption("Selecione para abrir:")
         sel = st.dataframe(df_prazos[['Documento', 'Status']], use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun")
-        doc_selecionado = None
-        if len(sel.selection.rows) > 0: doc_selecionado = df_prazos.iloc[sel.selection.rows[0]]['Documento']
+        
+        # LÓGICA DE PERSISTÊNCIA DO DOCUMENTO ABERTO
+        if len(sel.selection.rows) > 0:
+            doc_selecionado = df_prazos.iloc[sel.selection.rows[0]]['Documento']
+            st.session_state['doc_focado'] = doc_selecionado # Salva na memória
+        
+        # Recupera da memória se nada foi clicado agora
+        doc_ativo = st.session_state.get('doc_focado')
 
     with col_detalhe:
-        if doc_selecionado:
-            # Pega índice seguro
-            idx = df_prazos[df_prazos['Documento'] == doc_selecionado].index[0]
-            st.subheader(f"📝 {doc_selecionado}")
-            
-            with st.container(border=True):
-                c1, c2, c3 = st.columns([1.5, 1.5, 1])
+        if doc_ativo:
+            # Encontra índice seguro
+            indices = df_prazos[df_prazos['Documento'] == doc_ativo].index
+            if not indices.empty:
+                idx = indices[0]
+                st.subheader(f"📝 {doc_ativo}")
                 
-                # --- EDICAO DE DADOS MESTRE ---
-                curr_status = df_prazos.at[idx, 'Status']
-                if curr_status not in ["NORMAL", "ALTO", "CRÍTICO"]: curr_status = "NORMAL"
-                
-                novo_risco = c1.selectbox("Risco", ["NORMAL", "ALTO", "CRÍTICO"], index=["NORMAL", "ALTO", "CRÍTICO"].index(curr_status), key="sel_r")
-                
-                dt = df_prazos.at[idx, 'Vencimento']
-                if pd.isnull(dt): dt = date.today()
-                novo_dt = c2.date_input("Prazo", value=dt, format="DD/MM/YYYY", key="dt_p")
-                
-                # Atualiza MEMORIA imediatamente
-                if novo_risco != curr_status or novo_dt != dt:
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([1.5, 1.5, 1])
+                    curr_status = df_prazos.at[idx, 'Status']
+                    if curr_status not in ["NORMAL", "ALTO", "CRÍTICO"]: curr_status = "NORMAL"
+                    
+                    novo_risco = c1.selectbox("Risco", ["NORMAL", "ALTO", "CRÍTICO"], index=["NORMAL", "ALTO", "CRÍTICO"].index(curr_status), key="sel_r")
+                    
+                    dt = df_prazos.at[idx, 'Vencimento']
+                    if pd.isnull(dt): dt = date.today()
+                    novo_dt = c2.date_input("Prazo", value=dt, format="DD/MM/YYYY", key="dt_p")
+                    
+                    # Atualiza MEMORIA imediatamente (Sem Rerun)
                     df_prazos.at[idx, 'Status'] = novo_risco
                     df_prazos.at[idx, 'Vencimento'] = novo_dt
-                    st.session_state['dados_cache'] = (df_prazos, df_checklist) # Salva estado
-                
-                prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
-                c3.metric("Conclusão", f"{prog_atual}%")
-                st.progress(prog_atual)
+                    
+                    prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
+                    c3.metric("Conclusão", f"{prog_atual}%")
+                    st.progress(prog_atual)
 
-            st.write("✅ **Tarefas**")
-            
-            # Filtra Checklist
-            df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
-            mask = df_checklist['Documento_Ref'] == doc_selecionado
-            df_tarefas = df_checklist[mask].copy()
-            
-            # Adicionar Tarefa
-            col_t_inp, col_t_btn = st.columns([3, 1])
-            new_task = col_t_inp.text_input("Nova tarefa...", label_visibility="collapsed")
-            if col_t_btn.button("Adicionar", use_container_width=True):
-                if new_task:
-                    line = pd.DataFrame([{"Documento_Ref": doc_selecionado, "Tarefa": new_task, "Feito": False}])
-                    # Atualiza checklist mestre e memoria
-                    df_checklist = pd.concat([df_checklist, line], ignore_index=True)
+                st.write("✅ **Tarefas**")
+                df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
+                mask = df_checklist['Documento_Ref'] == doc_ativo
+                df_tarefas = df_checklist[mask].copy()
+                
+                # FORMULÁRIO DE ADIÇÃO (Mais estável que botão solto)
+                with st.form("form_add_task", clear_on_submit=True):
+                    col_t_inp, col_t_btn = st.columns([3, 1])
+                    new_task = col_t_inp.text_input("Nova tarefa...", label_visibility="collapsed")
+                    if col_t_btn.form_submit_button("Adicionar"):
+                        if new_task:
+                            line = pd.DataFrame([{"Documento_Ref": doc_ativo, "Tarefa": new_task, "Feito": False}])
+                            df_checklist = pd.concat([df_checklist, line], ignore_index=True)
+                            st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                            st.rerun()
+
+                if not df_tarefas.empty:
+                    edited = st.data_editor(
+                        df_tarefas, 
+                        num_rows="fixed", 
+                        use_container_width=True, 
+                        hide_index=True,
+                        column_config={
+                            "Documento_Ref": None,
+                            "Tarefa": st.column_config.TextColumn("Descrição", width="medium", disabled=True),
+                            "Feito": st.column_config.CheckboxColumn("OK", width="small")
+                        },
+                        key=f"editor_{doc_ativo}"
+                    )
+                    
+                    # CÁLCULO E PERSISTÊNCIA
+                    total = len(edited)
+                    feitos = edited['Feito'].sum()
+                    novo_p = int((feitos/total)*100) if total > 0 else 0
+                    
+                    if novo_p != prog_atual:
+                        df_prazos.at[idx, 'Progresso'] = novo_p
+                        
+                    # Reconstrói checklist mestre
+                    df_checklist = df_checklist[~mask]
+                    edited['Documento_Ref'] = doc_ativo
+                    df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
+                    
+                    # Salva estado
                     st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                    st.rerun()
+                    
+                    # Se progresso mudou, recarrega para atualizar a barra visualmente
+                    if novo_p != prog_atual: st.rerun()
 
-            if not df_tarefas.empty:
-                # Editor OTIMIZADO (sem ref, sem add dinamico, checkbox fixo)
-                edited = st.data_editor(
-                    df_tarefas, 
-                    num_rows="fixed", 
-                    use_container_width=True, 
-                    hide_index=True,
-                    column_config={
-                        "Documento_Ref": None,
-                        "Tarefa": st.column_config.TextColumn("Descrição", width="medium", disabled=True),
-                        "Feito": st.column_config.CheckboxColumn("OK", width="small")
-                    },
-                    key=f"editor_{doc_selecionado}"
-                )
-                
-                # RECALCULA PROGRESSO
-                total = len(edited)
-                feitos = edited['Feito'].sum()
-                novo_p = int((feitos/total)*100) if total > 0 else 0
-                
-                # Se mudou algo no check, atualiza tudo
-                # Verifica se houve mudança para evitar loop infinito desnecessário, 
-                # mas garante atualização da memória
-                
-                df_prazos.at[idx, 'Progresso'] = novo_p
-                
-                # Reconstrói o checklist mestre
-                df_checklist = df_checklist[~mask] # Tira os velhos desse doc
-                edited['Documento_Ref'] = doc_selecionado # Garante ref
-                df_checklist = pd.concat([df_checklist, edited], ignore_index=True) # Põe os novos
-                
-                # Salva na memória sempre que renderiza para garantir consistência
-                st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                else: st.info("Adicione tarefas acima.")
 
-            else: st.info("Adicione tarefas acima.")
-
-            st.markdown("---")
-            if st.button("💾 SALVAR TUDO NA NUVEM", type="primary", use_container_width=True):
-                if salvar_alteracoes_completo(df_prazos, df_checklist):
-                    time.sleep(0.5); st.rerun()
+                st.markdown("---")
+                if st.button("💾 SALVAR TUDO NA NUVEM", type="primary", use_container_width=True):
+                    if salvar_alteracoes_completo(df_prazos, df_checklist):
+                        time.sleep(0.5); st.rerun()
+            else:
+                st.warning("Documento não encontrado. Tente selecionar novamente.")
+                st.session_state['doc_focado'] = None # Limpa se der erro
         else: st.info("👈 Selecione um documento.")
 
 elif menu == "📸 Nova Vistoria":
