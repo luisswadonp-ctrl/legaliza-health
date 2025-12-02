@@ -171,7 +171,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_c['Feito'] = df_c['Feito'].astype(str)
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
         
-        st.cache_data.clear() # Limpa o cache para garantir atualização
+        st.cache_data.clear() # Limpa o cache
         st.toast("✅ Salvo!", icon="☁️")
         return True
     except Exception as e:
@@ -279,7 +279,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v32.2 - Correção Importação")
+    st.caption("v32.3 - Correção Final Layout")
 
 # --- ROBÔ ---
 try:
@@ -383,4 +383,232 @@ elif menu == "Gestão de Docs":
     if f_stt: df_show = df_show[df_show['Status'].isin(f_stt)]
     if f_txt: df_show = df_show[df_show.astype(str).apply(lambda x: x.str.contains(f_txt, case=False)).any(axis=1)]
 
-    col_l
+    # --- CORREÇÃO AQUI: As colunas são criadas ANTES de serem usadas ---
+    col_l, col_d = st.columns([1.2, 2])
+
+    with col_l:
+        st.info(f"Lista ({len(df_show)})")
+        sel = st.dataframe(
+            df_show[['Unidade', 'Documento', 'Status']], 
+            use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun",
+            column_config={"Status": st.column_config.TextColumn("Risco", width="small")}
+        )
+        
+        if len(sel.selection.rows) > 0:
+            idx_real = sel.selection.rows[0]
+            doc_selecionado_id = df_show.iloc[idx_real]['ID_UNICO']
+            st.session_state['doc_focado_id'] = doc_selecionado_id
+        
+        doc_ativo_id = st.session_state.get('doc_focado_id')
+        
+        st.markdown("---")
+        with st.expander("➕ Novo Documento"):
+            with st.form("new_doc", clear_on_submit=True):
+                n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.text_input("Documento"); n_c = st.text_input("CNPJ")
+                if st.form_submit_button("ADICIONAR"):
+                    if n_u and n_d and n_c:
+                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
+                        # Adiciona o novo documento ao dataframe temporário
+                        df_temp = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
+                        df_temp['ID_UNICO'] = df_temp['Unidade'] + " - " + df_temp['Documento']
+                        salvar_alteracoes_completo(df_temp, df_checklist)
+                        st.rerun()
+                    else:
+                        st.error("Preencha Unidade, Documento e CNPJ para adicionar.")
+
+        # BLOCO DE IMPORTAÇÃO EM MASSA
+        st.markdown("---")
+        with st.expander("⬆️ Importar em Massa (Excel/CSV)"):
+            import_file = st.file_uploader("Carregar arquivo (.xlsx ou .csv)", type=['xlsx', 'csv'], key="uploader_import_mass")
+            
+            if import_file:
+                # 1. Leitura do Arquivo e Tratamento
+                try:
+                    try:
+                        df_novo = pd.read_excel(import_file)
+                    except:
+                        df_novo = pd.read_csv(import_file, encoding='utf-8')
+                    
+                    # 2. Normalização
+                    colunas_base = ['Unidade', 'Setor', 'Documento', 'CNPJ']
+                    for col in colunas_base:
+                        if col not in df_novo.columns:
+                            df_novo[col] = ""
+                    
+                    df_novo = df_novo[colunas_base].astype(str)
+                    
+                    # 3. Preenchimento Default
+                    hoje = date.today()
+                    df_novo['Data_Recebimento'] = hoje
+                    df_novo['Vencimento'] = hoje
+                    df_novo['Status'] = "NORMAL"
+                    df_novo['Progresso'] = 0
+                    df_novo['Concluido'] = "False"
+                    
+                    df_novo = df_novo[df_novo['Documento'].astype(str).str.strip() != ""]
+
+                    if st.button(f"Integrar {len(df_novo)} Documentos e Salvar na Nuvem", type="primary"):
+                        if df_novo.empty:
+                            st.warning("Arquivo sem dados válidos.")
+                        else:
+                            # 4. Integração (SEM GLOBAL)
+                            df_novo['ID_UNICO'] = df_novo['Unidade'].astype(str) + " - " + df_novo['Documento'].astype(str)
+                            
+                            # Cria dataframe combinado localmente
+                            df_combinado = pd.concat([df_prazos, df_novo], ignore_index=True)
+                            df_combinado = df_combinado.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
+                            
+                            # 5. Salva na Nuvem
+                            salvar_alteracoes_completo(df_combinado, df_checklist)
+                            st.success(f"✅ {len(df_novo)} documentos salvos!")
+                            st.balloons()
+                            time.sleep(1)
+                            st.rerun()
+
+                except Exception as e:
+                    st.error(f"Erro: {e}")
+        # FIM DO BLOCO
+        
+    with col_d:
+        if doc_ativo_id:
+            indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
+            
+            if not indices.empty:
+                idx = indices[0]
+                doc_nome = df_prazos.at[idx, 'Documento']
+                
+                st.subheader(f"📝 {doc_nome}")
+                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
+                
+                c_del, _ = st.columns([1, 4])
+                if c_del.button("🗑️ Excluir"):
+                    df_prazos = df_prazos.drop(idx).reset_index(drop=True)
+                    df_checklist = df_checklist[df_checklist['Documento_Ref'] != doc_ativo_id]
+                    salvar_alteracoes_completo(df_prazos, df_checklist)
+                    st.session_state['doc_focado_id'] = None
+                    st.rerun()
+
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns(3)
+                    
+                    st_curr = df_prazos.at[idx, 'Status']
+                    opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
+                    if st_curr not in opcoes: st_curr = "NORMAL"
+
+                    novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
+                    
+                    cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
+                    c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; color: white;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
+                    
+                    # Edição de Setor
+                    novo_setor = st.text_input("Editar Setor", value=df_prazos.at[idx, 'Setor'], key=f"edit_sector_{doc_ativo_id}")
+                    
+                    try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
+                    except: d_rec = date.today()
+                    df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key=f"dt_rec_{doc_ativo_id}")
+                    
+                    try: d_venc = pd.to_datetime(df_prazos.at[idx, 'Vencimento'], dayfirst=True).date()
+                    except: d_venc = date.today()
+                    df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key=f"dt_venc_{doc_ativo_id}")
+                    
+                    # ATUALIZA MEMORIA
+                    df_prazos.at[idx, 'Status'] = novo_risco
+                    df_prazos.at[idx, 'Setor'] = novo_setor
+                    
+                    prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
+                    st.progress(prog_atual, text=f"Progressão: {prog_atual}%")
+
+                st.write("✅ **Tarefas**")
+                df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
+                df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
+                mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
+                df_t = df_checklist[mask].copy().reset_index(drop=True)
+                
+                c_add, c_btn = st.columns([3, 1])
+                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
+                if c_btn.button("ADICIONAR", key=f"btn_add_{doc_ativo_id}"):
+                    if new_t:
+                        line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
+                        df_checklist = pd.concat([df_checklist, line], ignore_index=True)
+                        salvar_alteracoes_completo(df_prazos, df_checklist)
+                        st.rerun()
+
+                if not df_t.empty:
+                    edited = st.data_editor(
+                        df_t, 
+                        num_rows="dynamic", 
+                        use_container_width=True, 
+                        hide_index=True,
+                        column_config={
+                            "Documento_Ref": None,
+                            "Tarefa": st.column_config.TextColumn("Descrição", width="medium"),
+                            "Feito": st.column_config.CheckboxColumn("OK", width="small")
+                        },
+                        key=f"ed_{doc_ativo_id}"
+                    )
+                    
+                    # CALCULA E ATUALIZA PROGRESSO
+                    tot = len(edited); done = edited['Feito'].sum(); new_p = int((done/tot)*100) if tot > 0 else 0
+                    
+                    if new_p != prog_atual:
+                        df_prazos.at[idx, 'Progresso'] = new_p
+                    
+                    if not edited.equals(df_t):
+                        df_checklist = df_checklist[~mask]
+                        edited['Documento_Ref'] = str(doc_ativo_id)
+                        df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
+                        
+                        if new_p != prog_atual: st.rerun()
+
+                else: st.info("Adicione tarefas acima.")
+
+                st.markdown("---")
+                if st.button("💾 SALVAR TUDO NA NUVEM", type="primary"):
+                    if salvar_alteracoes_completo(df_prazos, df_checklist): time.sleep(0.5); st.rerun()
+            else:
+                st.warning("Documento não encontrado.")
+                if st.button("Voltar"): st.session_state['doc_focado_id'] = None; st.rerun()
+        else: st.info("👈 Selecione um documento na lista.")
+
+elif menu == "Vistoria Mobile":
+    st.title("Auditoria Mobile")
+    with st.container(border=True):
+        c1, c2 = st.columns([1, 2])
+        foto = c1.camera_input("Foto")
+        setor = c2.selectbox("Local", ["Recepção", "Raio-X", "UTI", "Expurgo", "Cozinha", "Outros"])
+        item = c2.text_input("Item")
+        sit = c2.radio("Situação", ["❌ Irregular", "✅ Conforme"], horizontal=True)
+        grav = c2.select_slider("Risco", ["Baixo", "Médio", "Alto", "CRÍTICO"])
+        obs = st.text_area("Obs")
+        if st.button("➕ REGISTRAR", type="primary"):
+            st.session_state['vistorias'].append({"Setor": setor, "Item": item, "Situação": sit, "Gravidade": grav, "Obs": obs, "Foto_Binaria": foto})
+            st.success("Registrado!")
+
+elif menu == "Relatórios":
+    st.title("Relatórios")
+    tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
+    with tab1:
+        if st.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
+        if len(st.session_state['vistorias']) > 0:
+            pdf = gerar_pdf(st.session_state['vistorias'])
+            st.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
+    with tab2:
+        try:
+            sh = conectar_gsheets()
+            ws = sh.worksheet("Vistorias")
+            df_h = pd.DataFrame(ws.get_all_records())
+            if not df_h.empty:
+                sel = st.selectbox("Data:", df_h['Data'].unique())
+                df_f = df_h[df_h['Data'] == sel]
+                
+                st.info("Edite ou exclua linhas abaixo e clique em Salvar Correções.")
+                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
+                
+                c_save, c_down = st.columns(2)
+                if c_save.button("💾 Salvar Correções no Histórico"):
+                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
+                
+                if c_down.button(f"📥 Baixar PDF"):
+                    pdf = gerar_pdf(df_f.to_dict('records'))
+                    st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
+        except: st.error("Sem histórico.")
