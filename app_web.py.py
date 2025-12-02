@@ -60,10 +60,6 @@ st.markdown("""
         background-image: linear-gradient(to right, #2563eb, #1d4ed8);
         border: none; color: white;
     }
-    
-    /* Botão de Excluir (Vermelho - identificamos pelo texto depois ou ordem) */
-    /* Streamlit não permite CSS por ID fácil, então mantemos o padrão, 
-       mas usaremos type='secondary' para diferenciar visualmente */
 
     .stProgress > div > div > div > div { background-color: #00c853; }
 </style>
@@ -143,7 +139,6 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_prazos.clear()
         df_p = df_prazos.copy()
         
-        # Formatação para salvar
         for c_date in ['Vencimento', 'Data_Recebimento']:
             df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
             
@@ -234,7 +229,7 @@ if 'doc_focado' not in st.session_state: st.session_state['doc_focado'] = None
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v15.0 - Delete & Layout Fix")
+    st.caption("v16.0 - CNPJ Visible")
     menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -242,11 +237,8 @@ with st.sidebar:
 try:
     agora = datetime.now()
     diff = (agora - st.session_state['ultima_notificacao']).total_seconds() / 60
-    
-    # Cache ou Nuvem
     df_alertas = st.session_state.get('dados_cache', [None])[0]
     if df_alertas is None and diff >= INTERVALO_GERAL: df_alertas, _ = carregar_tudo()
-        
     if df_alertas is not None and diff >= INTERVALO_GERAL:
         lista_alerta = []
         hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).date()
@@ -281,7 +273,7 @@ if menu == "📊 Dashboard":
     st.markdown("---")
     if n_crit > 0:
         st.error(f"⚠️ {n_crit} Documentos CRÍTICOS.")
-        st.dataframe(df_p[df_p['Status'] == "CRÍTICO"][['Unidade', 'Documento', 'Vencimento', 'Progresso']], use_container_width=True, hide_index=True)
+        st.dataframe(df_p[df_p['Status'] == "CRÍTICO"][['Unidade', 'Documento', 'CNPJ', 'Vencimento', 'Progresso']], use_container_width=True, hide_index=True)
     else: st.success("Tudo sob controle.")
 
 elif menu == "📅 Gestão de Documentos":
@@ -291,19 +283,14 @@ elif menu == "📅 Gestão de Documentos":
         st.session_state['dados_cache'] = carregar_tudo()
     df_prazos, df_checklist = st.session_state['dados_cache']
     
-    # --- ÁREA DE FILTROS LIMPA ---
     with st.expander("🔍 FILTROS & BUSCA", expanded=True):
         f1, f2, f3 = st.columns(3)
         lista_unidades = ["Todas"] + sorted(list(df_prazos['Unidade'].unique())) if 'Unidade' in df_prazos.columns else ["Todas"]
         filtro_unidade = f1.selectbox("Unidade:", lista_unidades)
         filtro_status = f2.multiselect("Status:", ["CRÍTICO", "ALTO", "NORMAL"])
         busca_texto = f3.text_input("Buscar:")
-        
-        # Botão Limpar Centralizado
-        if st.button("Limpar Filtros", use_container_width=True):
-            st.rerun()
+        if st.button("Limpar Filtros", use_container_width=True): st.rerun()
 
-    # Aplica Filtros
     df_filtrado = df_prazos.copy()
     if filtro_unidade != "Todas": df_filtrado = df_filtrado[df_filtrado['Unidade'] == filtro_unidade]
     if filtro_status: df_filtrado = df_filtrado[df_filtrado['Status'].isin(filtro_status)]
@@ -314,22 +301,25 @@ elif menu == "📅 Gestão de Documentos":
             df_filtrado['CNPJ'].str.contains(busca_texto, case=False, na=False)
         ]
 
-    # --- LAYOUT PRINCIPAL ---
     col_lista, col_detalhe = st.columns([1.2, 2])
     
     with col_lista:
         st.info(f"Lista ({len(df_filtrado)})")
         
-        # TABELA DE SELEÇÃO
+        # --- TABELA DE SELEÇÃO COM CNPJ ---
         selection = st.dataframe(
-            df_filtrado[['Unidade', 'Documento', 'Status']], 
+            df_filtrado[['Unidade', 'CNPJ', 'Documento', 'Status']], 
             use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun",
-            column_config={"Status": st.column_config.TextColumn("Risco", width="small"), "Unidade": st.column_config.TextColumn("Unidade", width="medium")}
+            column_config={
+                "Status": st.column_config.TextColumn("Risco", width="small"),
+                "Unidade": st.column_config.TextColumn("Unidade", width="small"),
+                "CNPJ": st.column_config.TextColumn("CNPJ", width="small"),
+                "Documento": st.column_config.TextColumn("Doc", width="medium"),
+            }
         )
         
         if len(selection.selection.rows) > 0:
             idx_selecionado = selection.selection.rows[0]
-            # Pega ID correto do DF filtrado
             doc_selecionado = df_filtrado.iloc[idx_selecionado]['Documento']
             st.session_state['doc_focado'] = doc_selecionado
         
@@ -355,35 +345,23 @@ elif menu == "📅 Gestão de Documentos":
 
     with col_detalhe:
         if doc_ativo:
-            # Busca índice no DF ORIGINAL (para editar o dado certo)
             indices = df_prazos[df_prazos['Documento'] == doc_ativo].index
-            
             if not indices.empty:
-                idx = indices[0] # Índice real na memória
+                idx = indices[0]
+                st.subheader(f"📝 {doc_ativo}")
+                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
                 
-                # --- CABEÇALHO COM BOTÃO EXCLUIR ---
                 col_tit, col_del = st.columns([3, 1])
-                col_tit.subheader(f"📝 {doc_ativo}")
-                
-                # BOTÃO DE EXCLUIR (PERIGOSO)
                 if col_del.button("🗑️ Excluir", type="primary"):
-                    # 1. Remove do DF Prazos
                     df_prazos = df_prazos.drop(idx).reset_index(drop=True)
-                    # 2. Remove tarefas do Checklist
                     df_checklist = df_checklist[df_checklist['Documento_Ref'] != doc_ativo]
-                    
-                    # 3. Salva e Limpa
                     salvar_alteracoes_completo(df_prazos, df_checklist)
                     st.session_state['dados_cache'] = (df_prazos, df_checklist)
                     st.session_state['doc_focado'] = None
-                    st.toast("Documento excluído com sucesso!")
-                    time.sleep(1)
                     st.rerun()
 
-                # --- EDIÇÃO ---
                 with st.container(border=True):
                     c1, c2, c3 = st.columns(3)
-                    
                     status_atual = df_prazos.at[idx, 'Status']
                     opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
                     if status_atual not in opcoes: status_atual = "NORMAL"
@@ -397,7 +375,6 @@ elif menu == "📅 Gestão de Documentos":
                     if pd.isnull(dt_venc): dt_venc = date.today()
                     nova_dt_venc = c3.date_input("Vence", value=dt_venc, format="DD/MM/YYYY", key="dt_venc")
                     
-                    # Atualiza Memória
                     df_prazos.at[idx, 'Status'] = novo_risco
                     df_prazos.at[idx, 'Data_Recebimento'] = nova_dt_rec
                     df_prazos.at[idx, 'Vencimento'] = nova_dt_venc
@@ -411,7 +388,6 @@ elif menu == "📅 Gestão de Documentos":
                 mask = df_checklist['Documento_Ref'] == doc_ativo
                 df_tarefas = df_checklist[mask].copy()
                 
-                # Add Tarefa
                 col_t_inp, col_t_btn = st.columns([3, 1])
                 new_task = col_t_inp.text_input("Nova tarefa...", label_visibility="collapsed")
                 if col_t_btn.button("Adicionar", use_container_width=True):
@@ -443,7 +419,6 @@ elif menu == "📅 Gestão de Documentos":
                     edited['Documento_Ref'] = doc_ativo
                     df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
                     st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                    
                     if novo_p != prog_atual: st.rerun()
                 else: st.info("Adicione tarefas acima.")
 
@@ -452,10 +427,8 @@ elif menu == "📅 Gestão de Documentos":
                     if salvar_alteracoes_completo(df_prazos, df_checklist):
                         time.sleep(0.5); st.rerun()
             else:
-                st.warning("Documento não encontrado (pode ter sido excluído). Limpe o filtro.")
-                if st.button("Voltar"):
-                    st.session_state['doc_focado'] = None
-                    st.rerun()
+                st.warning("Documento não encontrado.")
+                if st.button("Voltar"): st.session_state['doc_focado'] = None; st.rerun()
         else: st.info("👈 Selecione um documento na lista.")
 
 elif menu == "📸 Nova Vistoria":
