@@ -14,8 +14,6 @@ import streamlit.components.v1 as components
 import pytz
 import io
 from streamlit_option_menu import option_menu 
-import chardet # Para detectar encoding de CSV
-import openpyxl # Necessário para ler xlsx
 
 # Tenta importar Plotly
 try:
@@ -102,76 +100,6 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
                       headers={"Title": titulo.encode('utf-8'), "Priority": prioridade, "Tags": "hospital"})
         return True
     except: return False
-
-# --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS ---
-def processar_dados_importados(df_importado_raw, tipo_doc_base):
-    """Mapeia o DataFrame importado (CSV/Excel) para o formato do df_prazos."""
-    df = df_importado_raw.copy()
-    
-    # Normalização dos nomes das colunas
-    df.columns = [str(c).strip().replace('.', '').upper() for c in df.columns]
-    
-    # Mapeamento de Colunas (Candidatos)
-    col_map = {
-        'Unidade': ['NOME DA UNIDADE', 'UNIDADE'],
-        'CNPJ': ['CNPJ'],
-        'Setor': ['SETOR FISCALIZADO', 'SETOR'],
-        'Documento_Principal': ['TIPO DE DOCUMENTO', 'NOME DO DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO'],
-        'Vencimento': ['DATA LIMITE DE ATENDIMENTO', 'VENCIMENTO', 'SLA ESPERADO'],
-        'Data_Recebimento': ['DATA DO DOCUMENTO/RECEBIDO PELA UNIDADE', 'DATA INÍCIO', 'DATA ENVIO PGTO'],
-        'Status_Origem': ['STATUS DO PROCESSO', 'STATUS'],
-    }
-    
-    df_result = pd.DataFrame()
-    hoje = date.today()
-    
-    # Itera sobre o mapa para encontrar a melhor coluna
-    for col_final, col_candidatas in col_map.items():
-        col_encontrada = next((c for c in col_candidatas if c in df.columns), None)
-        
-        val = df[col_encontrada].astype(str).str.strip().fillna('') if col_encontrada else ''
-
-        if 'Data' in col_final or 'Vencimento' in col_final:
-            try: df_result[col_final] = pd.to_datetime(val, dayfirst=True, errors='coerce').dt.date.fillna(hoje)
-            except: df_result[col_final] = hoje
-        else:
-            df_result[col_final] = val
-            
-    # Combina Nome do Documento Principal
-    doc_base = df_result.get('Documento_Principal', pd.Series([''] * len(df_result)))
-    doc_detalhe = df_result.get('MOTIVO DA FISCALIZAÇÃO', pd.Series([''] * len(df_result)))
-
-    df_result['Documento'] = doc_base.str.cat(doc_detalhe, sep=' - ', na_rep='').str.strip(' - ')
-    df_result['Documento'] = df_result['Documento'].apply(lambda x: x if x else tipo_doc_base)
-
-    
-    # Mapeamento de Status
-    status_map = {'CONCLUÍDO': 'NORMAL', 'QUITADO': 'NORMAL', 'EM ANDAMENTO': 'ALTO', 'PENDENTE': 'CRÍTICO', 'VENCIDO': 'CRÍTICO', 'EM PGTO': 'ALTO'}
-    df_result['Status'] = df_result.get('Status_Origem', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
-    
-    # Preenchimento de campos vazios com info amigável (Conforme solicitado)
-    df_result['Unidade'] = df_result['Unidade'].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
-    df_result['Setor'] = df_result['Setor'].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
-    df_result['CNPJ'] = df_result['CNPJ'].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
-    
-    # Limpa linhas sem Unidade ou Documento (mínimo necessário)
-    df_result = df_result[df_result['Unidade'] != 'Não Informado'].reset_index(drop=True)
-    
-    # Campos padrão
-    df_result['Progresso'] = 0
-    df_result['Concluido'] = 'False'
-    
-    # Seleciona as colunas finais
-    colunas_finais = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
-    
-    # Finaliza preenchendo colunas que faltam no resultado final (para não dar erro de coluna)
-    for col in colunas_finais:
-        if col not in df_result.columns:
-            df_result[col] = '' # Deve ser tratado no load, mas garante
-
-    return df_result[colunas_finais].copy()
-
-# --- FUNÇÕES DE CONEXÃO E SALVAMENTO ---
 
 def carregar_tudo():
     try:
@@ -347,7 +275,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v34.0 - Import Final")
+    st.caption("v34.0 - Final Bugfix")
 
 # --- ROBÔ ---
 try:
@@ -394,8 +322,6 @@ if menu == "Painel Geral":
     n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
-    
-    # LAYOUT MOBILE: KPIs empilhados, Tabela e Gráfico empilhados.
     
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
@@ -476,7 +402,7 @@ elif menu == "Gestão de Docs":
         doc_ativo_id = st.session_state.get('doc_focado_id')
         
         st.markdown("---")
-        
+
         # --- BLOCO DE IMPORTAÇÃO ---
         with st.expander("⬆️ Importação em Massa"):
             with st.form("import_docs", clear_on_submit=True):
@@ -488,6 +414,7 @@ elif menu == "Gestão de Docs":
                 if st.form_submit_button("IMPORTAR E VALIDAR", type="secondary"):
                     if uploaded_file is not None:
                         try:
+                            # Tentativa de leitura robusta
                             if uploaded_file.name.endswith('.csv'):
                                 try: df_novo_raw = pd.read_csv(uploaded_file, encoding='utf-8', sep=',')
                                 except: uploaded_file.seek(0); df_novo_raw = pd.read_csv(uploaded_file, encoding='latin1', sep=';')
@@ -514,6 +441,8 @@ elif menu == "Gestão de Docs":
         if 'df_import_preview' in st.session_state and not st.session_state['df_import_preview'].empty:
             st.markdown("---")
             st.subheader(f"🔄 Revisão de Documentos (Importação)")
+            st.info("Revise os dados abaixo antes de salvar na nuvem.")
+            
             df_preview = st.session_state['df_import_preview'].copy()
             
             df_edited = st.data_editor(
@@ -534,8 +463,8 @@ elif menu == "Gestão de Docs":
                 
                 df_edited['Progresso'] = 0
                 df_edited['Concluido'] = 'False'
+                
                 df_edited['ID_UNICO'] = df_edited['Unidade'].astype(str) + " - " + df_edited['Documento'].astype(str)
-
                 df_p_current = df_prazos.copy()
                 ids_atuais = df_p_current['ID_UNICO'].tolist()
                 
@@ -549,7 +478,7 @@ elif menu == "Gestão de Docs":
                         st.session_state['dados_cache'] = carregar_tudo()
                         st.rerun()
                 else:
-                     st.warning("Nenhum documento novo para adicionar após a filtragem de duplicatas ou a lista está vazia.")
+                     st.warning("Nenhum documento novo para adicionar.")
                      
             if c_i2.button("❌ Descartar", use_container_width=True):
                 del st.session_state['df_import_preview']
@@ -569,7 +498,7 @@ elif menu == "Gestão de Docs":
                         st.rerun()
 
     with col_d:
-        if doc_ativo_id: # --- BLOCO DE EDIÇÃO INDIVIDUAL ---
+        if doc_ativo_id:
             indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
             
             if not indices.empty:
@@ -624,14 +553,16 @@ elif menu == "Gestão de Docs":
                 mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
                 df_t = df_checklist[mask].copy().reset_index(drop=True)
                 
-                c_add, c_btn = st.columns([3, 1])
-                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
-                if c_btn.button("ADICIONAR", key=f"btn_add_{doc_ativo_id}"):
-                    if new_t:
-                        line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
-                        df_checklist = pd.concat([df_checklist, line], ignore_index=True)
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                        st.rerun()
+                # ADICIONAR TAREFA
+                with st.form(key=f"add_task_{doc_ativo_id}", clear_on_submit=True):
+                    c_add, c_btn = st.columns([3, 1])
+                    new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed")
+                    if c_btn.form_submit_button("ADICIONAR"):
+                        if new_t:
+                            line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
+                            df_checklist = pd.concat([df_checklist, line], ignore_index=True)
+                            st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                            st.rerun()
 
                 if not df_t.empty:
                     edited = st.data_editor(
