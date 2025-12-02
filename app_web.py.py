@@ -30,6 +30,147 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_GERAL = 120
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
+# --- LISTA PADRÃO DE DOCUMENTOS ---
+LISTA_TIPOS_DOCUMENTOS = [
+    "Licença de Publicidade",
+    "Conselho de Medicina (CRM)",
+    "Conselho de Farmácia (CRF)",
+    "Licença Sanitária",
+    "Conselho de Enfermagem (COREN)",
+    "CNES",
+    "Inscrição Municipal",
+    "Licença Ambiental",
+    "Alvará de Funcionamento",
+    "Corpo de Bombeiros",
+    "Polícia Civil (Termo de Vistoria)",
+    "Polícia Civil (Licença)",
+    "Conselho de Biomedicina (CRBM)",
+    "Conselho de Biologia (CRBio)",
+    "Conselho de Biomedicina (CRBM) Serviço - Laboratório",
+    "Licença Sanitária Serviço (Laboratório)",
+    "Conselho de Biomedicina (CRBM) Serviço - Posto de Coleta",
+    "Licença Sanitária Serviço (Dispensário)",
+    "Conselho de Nutrição (CRN)",
+    "Conselho de Psicologia (CRP)",
+    "Licença Sanitária Serviço (Farmácia)",
+    "Conselho de Radiologia (CRTR)",
+    "Conselho de Fisioterapia e Terapia Ocupacional (CREFITO)",
+    "Licença Sanitária Serviço (Cozinha/Nutrição)",
+    "Licença Sanitária Serviço (Radiologia)",
+    "Conselho de Fonoaudiologia (CREFONO)",
+    "Licença Sanitária Serviço (Oncologia)",
+    "Licença Sanitária Serviço (Equipamento)",
+    "Licença Sanitária Serviço (Ag. Transfusional)",
+    "Licença Sanitária Serviço (Clínica)",
+    "Conselho de Medicina (CRM) Serviço (Oncologia)",
+    "Conselho de Medicina (CRM) Serviço (Radiologia Clinica)",
+    "Conselho de Medicina (CRM) Serviço (Banco de Sangue)",
+    "Conselho de Enfermagem (COREN) Serviço (Urgência/Emergência)",
+    "Licença Sanitária Serviço (Vacinas)",
+    "Licença Sanitária Serviço (Quimioterapia)",
+    "Conselho de Enfermagem (COREN) Serviço (Oncologia)",
+    "Licença Sanitária Serviço (Equipamento 1)",
+    "Licença Sanitária Serviço (Equipamento 3)",
+    "Licença Sanitária Serviço (Equipamento 5)",
+    "Licença Sanitária Serviço (Equipamento 4)",
+    "Licença Sanitária Serviço (Equipamento 2)",
+    "Conselho de Enfermagem (COREN) Serviço (Quimioterapia)",
+    "Conselho de Farmácia (CRF) Serviço (Oncologia)",
+    "Licença Sanitária Serviço (Ultrassom)",
+    "Licença Sanitária Serviço (SADT - Apoio Diagnóstico Terapêutico)",
+    "Licença Sanitária Serviço (Equipamento 6)",
+    "Declaração de Trâmite Vigilância",
+    "Licença do Comando da Aeronáutica (COMAER)",
+    "Certificado de Manutenção do Sistema de Segurança",
+    "Conselho de Odontologia (CRO)",
+    "Licença Sanitária Serviço (Hemoterapia)",
+    "Licença Sanitária Serviço (Transplante Musculo Esquelético)",
+    "Licença Sanitária Serviço (Hemodinâmica)",
+    "Conselho de Farmácia (CRF) Serviço - Laboratório",
+    "Conselho de Medicina (CRM) Serviço (Endoscopia)",
+    "Conselho de Medicina (CRM) Serviço (UTI Adulto)",
+    "Conselho de Medicina (CRM) Serviço (UTI Neonatal)",
+    "Conselho de Medicina (CRM) Serviço Hemodiálise",
+    "Conselho de Medicina (CRM) Serviço (UTI Pediátrica)",
+    "Conselho de Enfermagem (COREN) Serviço (Nefrologia)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI Neonatal)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 2)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 3)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI Pediátrica)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 1)",
+    "Conselho de Enfermagem (COREN) Serviço (Vida & Imagem)",
+    "Carta de anuência tombamento",
+    "Licença Sanitária Serviço (Fisioterapia)",
+    "Licença Sanitária Serviço (Assistência Domiciliar)",
+    "Conselho de Medicina (CRM) Serviço (Ergometria)",
+    "Certificado de acessibilidade",
+    "Conselho de Farmácia (CRF) Serviço - Farmácia de Manipulação",
+    "Licença Sanitária (Tomografia)",
+    "Licença Sanitária Serviço (Transplante de Fígado)",
+    "Conselho de Enfermagem (COREN) Serviço - Hemodinâmica",
+    "Polícia Federal (Licença)",
+    "Conselho de Medicina (CRM) Serviço Hemodinamica",
+    "Conselho de Farmácia (CRF) Serviço - Farmácia Hospitalar",
+    "Licença Sanitária Serviço (Equipamento 9)",
+    "Licença Sanitária Serviço (Equipamento 7)",
+    "Licença Sanitária Serviço (Equipamento 8)",
+    "Licença Sanitária Serviço (Equipamento 15)",
+    "Termo de aceite de sinalização de vaga para deficiente e idoso",
+    "Licença Sanitária Serviço (Equipamento 21)",
+    "Licença Sanitária Serviço (Equipamento 18)",
+    "Licença Sanitária Serviço (Equipamento 19)",
+    "Licença Sanitária Serviço (Hemodiálise)",
+    "Licença Sanitária Serviço (Transplante de Medula Óssea)",
+    "Cadastro de tanques, bombas e equipamentos afins",
+    "Licença Sanitária Serviço (Equipamento 22)",
+    "Licença Sanitária Serviço (Equipamento 11)",
+    "Licença Sanitária Serviço (Equipamento 17)",
+    "Licença Sanitária Serviço (Equipamento 13)",
+    "Licença Sanitária Serviço (Equipamento 10)",
+    "Licença Sanitária Serviço (Equipamento 16)",
+    "Licença Sanitária Serviço (Equipamento 12)",
+    "Licença Sanitária Serviço (Transplante de Rim)",
+    "Licença Sanitária Serviço (Equipamento 14)",
+    "Licença Sanitária Serviço (Equipamento 20)",
+    "Licença Sanitária Serviço (Ambulância)",
+    "Licença Sanitária Serviço (Captação)",
+    "Licença Sanitária Serviço (Registro gráfico, ECG. EEG)",
+    "Licença Sanitária Serviço (Tomografia)",
+    "Conselho de Farmácia (CRF) Serviço - Posto de Coleta",
+    "Licença Sanitária Serviço (Remoção de pacientes)",
+    "Licença Sanitária Serviço (Endoscopia)",
+    "Licença Sanitária Serviço (Pronto Socorro)",
+    "Conselho de Enfermagem (COREN) Serviço (Ambulatorial)",
+    "Conselho de Biomedicina (CRBM) Serviço - Banco de Sangue",
+    "Conselho de Enfermagem (COREN) Serviço (CME)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI)",
+    "Conselho de Medicina (CRM) Serviço (Transplante de Médula Óssea)",
+    "Licença Sanitária Serviço (UTI Adulto)",
+    "Conselho de Medicina (CRM) Serviço (Obstetrícia)",
+    "Licença Sanitária Serviço (UTI Neonatal)",
+    "Licença Sanitária Serviço (Posto de Coleta de Leite Humano)",
+    "Conselho de Medicina (CRM) Serviço (Neonatologia)",
+    "Conselho de Medicina (CRM) Serviço (TME - Transplante de Músculo Esquelético)",
+    "Conselho de Enfermagem (COREN) Serviço (Centro Cirúrgico)",
+    "Conselho de Enfermagem (COREN) Serviço (Internação)",
+    "Conselho de Enfermagem (COREN) Serviço (Maternidade)",
+    "Licença Sanitária Serviço (Fonoaudiologia)",
+    "Licença Sanitária Serviço (Psicologia)",
+    "Licença Sanitária Serviço (Procedimentos Cirúrgicos)",
+    "Licença Sanitária Serviço (Consultório Isolado)",
+    "Conselho de Medicina (CRM) Serviço (Emergência)",
+    "Conselho de Medicina (CRM) Serviço (Pediatria)",
+    "Conselho de Medicina (CRM) - Diálise",
+    "Licença Sanitária Serviço (UTI Mista)",
+    "Projeto Arquitetonico (Visa e Prefeitura)",
+    "Habite-se",
+    "SDR",
+    "SMOP",
+    "Alvará de Obra",
+    "Outros"
+]
+LISTA_TIPOS_DOCUMENTOS = sorted(list(set(LISTA_TIPOS_DOCUMENTOS))) # Remove duplicatas e ordena
+
 # --- AUTO-REFRESH ---
 components.html("""
 <script>
@@ -285,7 +426,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v33.2 - Correção Check Sumindo")
+    st.caption("v34.0 - Importação Fixa + Lista Docs")
 
 # --- ROBÔ ---
 try:
@@ -404,7 +545,7 @@ elif menu == "Gestão de Docs":
         st.markdown("---")
         with st.expander("➕ Novo Documento (Manual)"):
             with st.form("new_doc", clear_on_submit=True):
-                n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.text_input("Documento"); n_c = st.text_input("CNPJ")
+                n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.selectbox("Documento", options=LISTA_TIPOS_DOCUMENTOS); n_c = st.text_input("CNPJ")
                 if st.form_submit_button("ADICIONAR"):
                     if n_u and n_d and n_c:
                         novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
@@ -433,31 +574,31 @@ elif menu == "Gestão de Docs":
                     
                     if not df_novo.empty:
                         df_novo.columns = df_novo.columns.str.strip()
+                        # CORREÇÃO: Mapeia Nome da unidade -> Unidade e CNPJ -> CNPJ. Documento vira PENDENTE.
                         if 'Nome da unidade' in df_novo.columns and 'CNPJ' in df_novo.columns:
                             df_import = df_novo[['Nome da unidade', 'CNPJ']].copy()
-                            df_import = df_import.rename(columns={'Nome da unidade': 'Unidade', 'CNPJ': 'Documento'})
-                            df_import['CNPJ'] = df_import['Documento']
+                            df_import = df_import.rename(columns={'Nome da unidade': 'Unidade'})
                             
                             st.write("### 🔎 Pré-visualização:")
                             st.dataframe(df_import.head(5), use_container_width=True)
                             
                             if st.button(f"✅ Confirmar Importação", type="primary"):
                                 df_import['Setor'] = ""
+                                df_import['Documento'] = "⚠️ SELECIONE O TIPO" # Placeholder
                                 df_import['Data_Recebimento'] = date.today()
                                 df_import['Vencimento'] = date.today()
                                 df_import['Status'] = "NORMAL"
                                 df_import['Progresso'] = 0
                                 df_import['Concluido'] = "False"
                                 df_import['Unidade'] = df_import['Unidade'].astype(str)
-                                df_import['Documento'] = df_import['Documento'].astype(str)
                                 df_import['CNPJ'] = df_import['CNPJ'].astype(str)
-                                df_import['ID_UNICO'] = df_import['Unidade'] + " - " + df_import['Documento']
+                                df_import['ID_UNICO'] = df_import['Unidade'] + " - " + df_import['CNPJ'] + " - " + df_import['Documento'] # ID temporário unico
                                 
                                 df_combinado = pd.concat([df_prazos, df_import], ignore_index=True)
                                 df_combinado = df_combinado.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
                                 
                                 salvar_alteracoes_completo(df_combinado, df_checklist)
-                                st.success(f"✅ {len(df_import)} importados!")
+                                st.success(f"✅ {len(df_import)} importados! Defina os tipos de documento agora.")
                                 st.balloons()
                                 time.sleep(1)
                                 st.rerun()
@@ -472,13 +613,24 @@ elif menu == "Gestão de Docs":
                 idx = indices[0]
                 doc_nome = df_prazos.at[idx, 'Documento']
                 
+                # --- EDIÇÃO DO TIPO DO DOCUMENTO (LISTA DROPDOWN) ---
                 c_tit, c_edit_btn = st.columns([4, 1])
-                novo_nome_doc = c_tit.text_input("Nome do Documento", value=doc_nome, key=f"nome_doc_{doc_ativo_id}")
+                
+                # Garante que o valor atual esteja na lista para não dar erro
+                opcoes_docs = LISTA_TIPOS_DOCUMENTOS.copy()
+                if doc_nome not in opcoes_docs:
+                    opcoes_docs.insert(0, doc_nome) # Adiciona temporariamente se for um nome antigo ou customizado
+                
+                try: idx_atual = opcoes_docs.index(doc_nome)
+                except: idx_atual = 0
+
+                novo_nome_doc = c_tit.selectbox("Tipo de Documento", options=opcoes_docs, index=idx_atual, key=f"nome_doc_{doc_ativo_id}")
                 
                 if novo_nome_doc != doc_nome:
-                     if c_edit_btn.button("Salvar Nome"):
+                     if c_edit_btn.button("Salvar Tipo"):
                         antigo_id = doc_ativo_id
                         nova_unidade = df_prazos.at[idx, 'Unidade']
+                        # Recria ID baseado no novo nome
                         novo_id = nova_unidade + " - " + novo_nome_doc
                         
                         df_prazos.at[idx, 'Documento'] = novo_nome_doc
@@ -582,7 +734,6 @@ elif menu == "Gestão de Docs":
                         edited['Documento_Ref'] = str(doc_ativo_id)
                         df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
                         update_dados_local(df_prazos, df_checklist)
-                        # Rerun para garantir que o checkbox não suma
                         st.rerun()
 
                 else: st.info("Adicione tarefas acima.")
