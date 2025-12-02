@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import time
 from fpdf import FPDF
 import tempfile
@@ -27,147 +27,56 @@ except ImportError:
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
 
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
-INTERVALO_GERAL = 120
+INTERVALO_CHECK_ROBO = 60 # O robô verifica a cada 60 segundos se deu a hora de enviar
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
 # --- LISTA PADRÃO DE DOCUMENTOS ---
 LISTA_TIPOS_DOCUMENTOS = [
-    "Licença de Publicidade",
-    "Conselho de Medicina (CRM)",
-    "Conselho de Farmácia (CRF)",
-    "Licença Sanitária",
-    "Conselho de Enfermagem (COREN)",
-    "CNES",
-    "Inscrição Municipal",
-    "Licença Ambiental",
-    "Alvará de Funcionamento",
-    "Corpo de Bombeiros",
-    "Polícia Civil (Termo de Vistoria)",
-    "Polícia Civil (Licença)",
-    "Conselho de Biomedicina (CRBM)",
-    "Conselho de Biologia (CRBio)",
-    "Conselho de Biomedicina (CRBM) Serviço - Laboratório",
-    "Licença Sanitária Serviço (Laboratório)",
-    "Conselho de Biomedicina (CRBM) Serviço - Posto de Coleta",
-    "Licença Sanitária Serviço (Dispensário)",
-    "Conselho de Nutrição (CRN)",
-    "Conselho de Psicologia (CRP)",
-    "Licença Sanitária Serviço (Farmácia)",
-    "Conselho de Radiologia (CRTR)",
-    "Conselho de Fisioterapia e Terapia Ocupacional (CREFITO)",
-    "Licença Sanitária Serviço (Cozinha/Nutrição)",
-    "Licença Sanitária Serviço (Radiologia)",
-    "Conselho de Fonoaudiologia (CREFONO)",
-    "Licença Sanitária Serviço (Oncologia)",
-    "Licença Sanitária Serviço (Equipamento)",
-    "Licença Sanitária Serviço (Ag. Transfusional)",
-    "Licença Sanitária Serviço (Clínica)",
-    "Conselho de Medicina (CRM) Serviço (Oncologia)",
-    "Conselho de Medicina (CRM) Serviço (Radiologia Clinica)",
-    "Conselho de Medicina (CRM) Serviço (Banco de Sangue)",
-    "Conselho de Enfermagem (COREN) Serviço (Urgência/Emergência)",
-    "Licença Sanitária Serviço (Vacinas)",
-    "Licença Sanitária Serviço (Quimioterapia)",
-    "Conselho de Enfermagem (COREN) Serviço (Oncologia)",
-    "Licença Sanitária Serviço (Equipamento 1)",
-    "Licença Sanitária Serviço (Equipamento 3)",
-    "Licença Sanitária Serviço (Equipamento 5)",
-    "Licença Sanitária Serviço (Equipamento 4)",
-    "Licença Sanitária Serviço (Equipamento 2)",
-    "Conselho de Enfermagem (COREN) Serviço (Quimioterapia)",
-    "Conselho de Farmácia (CRF) Serviço (Oncologia)",
-    "Licença Sanitária Serviço (Ultrassom)",
-    "Licença Sanitária Serviço (SADT - Apoio Diagnóstico Terapêutico)",
-    "Licença Sanitária Serviço (Equipamento 6)",
-    "Declaração de Trâmite Vigilância",
-    "Licença do Comando da Aeronáutica (COMAER)",
-    "Certificado de Manutenção do Sistema de Segurança",
-    "Conselho de Odontologia (CRO)",
-    "Licença Sanitária Serviço (Hemoterapia)",
-    "Licença Sanitária Serviço (Transplante Musculo Esquelético)",
-    "Licença Sanitária Serviço (Hemodinâmica)",
-    "Conselho de Farmácia (CRF) Serviço - Laboratório",
-    "Conselho de Medicina (CRM) Serviço (Endoscopia)",
-    "Conselho de Medicina (CRM) Serviço (UTI Adulto)",
-    "Conselho de Medicina (CRM) Serviço (UTI Neonatal)",
-    "Conselho de Medicina (CRM) Serviço Hemodiálise",
-    "Conselho de Medicina (CRM) Serviço (UTI Pediátrica)",
-    "Conselho de Enfermagem (COREN) Serviço (Nefrologia)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI Neonatal)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 2)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 3)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI Pediátrica)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 1)",
-    "Conselho de Enfermagem (COREN) Serviço (Vida & Imagem)",
-    "Carta de anuência tombamento",
-    "Licença Sanitária Serviço (Fisioterapia)",
-    "Licença Sanitária Serviço (Assistência Domiciliar)",
-    "Conselho de Medicina (CRM) Serviço (Ergometria)",
-    "Certificado de acessibilidade",
-    "Conselho de Farmácia (CRF) Serviço - Farmácia de Manipulação",
-    "Licença Sanitária (Tomografia)",
-    "Licença Sanitária Serviço (Transplante de Fígado)",
-    "Conselho de Enfermagem (COREN) Serviço - Hemodinâmica",
-    "Polícia Federal (Licença)",
-    "Conselho de Medicina (CRM) Serviço Hemodinamica",
-    "Conselho de Farmácia (CRF) Serviço - Farmácia Hospitalar",
-    "Licença Sanitária Serviço (Equipamento 9)",
-    "Licença Sanitária Serviço (Equipamento 7)",
-    "Licença Sanitária Serviço (Equipamento 8)",
-    "Licença Sanitária Serviço (Equipamento 15)",
-    "Termo de aceite de sinalização de vaga para deficiente e idoso",
-    "Licença Sanitária Serviço (Equipamento 21)",
-    "Licença Sanitária Serviço (Equipamento 18)",
-    "Licença Sanitária Serviço (Equipamento 19)",
-    "Licença Sanitária Serviço (Hemodiálise)",
-    "Licença Sanitária Serviço (Transplante de Medula Óssea)",
-    "Cadastro de tanques, bombas e equipamentos afins",
-    "Licença Sanitária Serviço (Equipamento 22)",
-    "Licença Sanitária Serviço (Equipamento 11)",
-    "Licença Sanitária Serviço (Equipamento 17)",
-    "Licença Sanitária Serviço (Equipamento 13)",
-    "Licença Sanitária Serviço (Equipamento 10)",
-    "Licença Sanitária Serviço (Equipamento 16)",
-    "Licença Sanitária Serviço (Equipamento 12)",
-    "Licença Sanitária Serviço (Transplante de Rim)",
-    "Licença Sanitária Serviço (Equipamento 14)",
-    "Licença Sanitária Serviço (Equipamento 20)",
-    "Licença Sanitária Serviço (Ambulância)",
-    "Licença Sanitária Serviço (Captação)",
-    "Licença Sanitária Serviço (Registro gráfico, ECG. EEG)",
-    "Licença Sanitária Serviço (Tomografia)",
-    "Conselho de Farmácia (CRF) Serviço - Posto de Coleta",
-    "Licença Sanitária Serviço (Remoção de pacientes)",
-    "Licença Sanitária Serviço (Endoscopia)",
-    "Licença Sanitária Serviço (Pronto Socorro)",
-    "Conselho de Enfermagem (COREN) Serviço (Ambulatorial)",
-    "Conselho de Biomedicina (CRBM) Serviço - Banco de Sangue",
-    "Conselho de Enfermagem (COREN) Serviço (CME)",
-    "Conselho de Enfermagem (COREN) Serviço (UTI)",
-    "Conselho de Medicina (CRM) Serviço (Transplante de Médula Óssea)",
-    "Licença Sanitária Serviço (UTI Adulto)",
-    "Conselho de Medicina (CRM) Serviço (Obstetrícia)",
-    "Licença Sanitária Serviço (UTI Neonatal)",
-    "Licença Sanitária Serviço (Posto de Coleta de Leite Humano)",
-    "Conselho de Medicina (CRM) Serviço (Neonatologia)",
-    "Conselho de Medicina (CRM) Serviço (TME - Transplante de Músculo Esquelético)",
-    "Conselho de Enfermagem (COREN) Serviço (Centro Cirúrgico)",
-    "Conselho de Enfermagem (COREN) Serviço (Internação)",
-    "Conselho de Enfermagem (COREN) Serviço (Maternidade)",
-    "Licença Sanitária Serviço (Fonoaudiologia)",
-    "Licença Sanitária Serviço (Psicologia)",
-    "Licença Sanitária Serviço (Procedimentos Cirúrgicos)",
-    "Licença Sanitária Serviço (Consultório Isolado)",
-    "Conselho de Medicina (CRM) Serviço (Emergência)",
-    "Conselho de Medicina (CRM) Serviço (Pediatria)",
-    "Conselho de Medicina (CRM) - Diálise",
-    "Licença Sanitária Serviço (UTI Mista)",
-    "Projeto Arquitetonico (Visa e Prefeitura)",
-    "Habite-se",
-    "SDR",
-    "SMOP",
-    "Alvará de Obra",
-    "Outros"
+    "Licença de Publicidade", "Conselho de Medicina (CRM)", "Conselho de Farmácia (CRF)", "Licença Sanitária",
+    "Conselho de Enfermagem (COREN)", "CNES", "Inscrição Municipal", "Licença Ambiental", "Alvará de Funcionamento",
+    "Corpo de Bombeiros", "Polícia Civil (Termo de Vistoria)", "Polícia Civil (Licença)", "Conselho de Biomedicina (CRBM)",
+    "Conselho de Biologia (CRBio)", "Conselho de Biomedicina (CRBM) Serviço - Laboratório", "Licença Sanitária Serviço (Laboratório)",
+    "Conselho de Biomedicina (CRBM) Serviço - Posto de Coleta", "Licença Sanitária Serviço (Dispensário)", "Conselho de Nutrição (CRN)",
+    "Conselho de Psicologia (CRP)", "Licença Sanitária Serviço (Farmácia)", "Conselho de Radiologia (CRTR)",
+    "Conselho de Fisioterapia e Terapia Ocupacional (CREFITO)", "Licença Sanitária Serviço (Cozinha/Nutrição)",
+    "Licença Sanitária Serviço (Radiologia)", "Conselho de Fonoaudiologia (CREFONO)", "Licença Sanitária Serviço (Oncologia)",
+    "Licença Sanitária Serviço (Equipamento)", "Licença Sanitária Serviço (Ag. Transfusional)", "Licença Sanitária Serviço (Clínica)",
+    "Conselho de Medicina (CRM) Serviço (Oncologia)", "Conselho de Medicina (CRM) Serviço (Radiologia Clinica)",
+    "Conselho de Medicina (CRM) Serviço (Banco de Sangue)", "Conselho de Enfermagem (COREN) Serviço (Urgência/Emergência)",
+    "Licença Sanitária Serviço (Vacinas)", "Licença Sanitária Serviço (Quimioterapia)", "Conselho de Enfermagem (COREN) Serviço (Oncologia)",
+    "Licença Sanitária Serviço (Equipamento 1)", "Licença Sanitária Serviço (Equipamento 3)", "Licença Sanitária Serviço (Equipamento 5)",
+    "Licença Sanitária Serviço (Equipamento 4)", "Licença Sanitária Serviço (Equipamento 2)", "Conselho de Enfermagem (COREN) Serviço (Quimioterapia)",
+    "Conselho de Farmácia (CRF) Serviço (Oncologia)", "Licença Sanitária Serviço (Ultrassom)", "Licença Sanitária Serviço (SADT - Apoio Diagnóstico Terapêutico)",
+    "Licença Sanitária Serviço (Equipamento 6)", "Declaração de Trâmite Vigilância", "Licença do Comando da Aeronáutica (COMAER)",
+    "Certificado de Manutenção do Sistema de Segurança", "Conselho de Odontologia (CRO)", "Licença Sanitária Serviço (Hemoterapia)",
+    "Licença Sanitária Serviço (Transplante Musculo Esquelético)", "Licença Sanitária Serviço (Hemodinâmica)", "Conselho de Farmácia (CRF) Serviço - Laboratório",
+    "Conselho de Medicina (CRM) Serviço (Endoscopia)", "Conselho de Medicina (CRM) Serviço (UTI Adulto)", "Conselho de Medicina (CRM) Serviço (UTI Neonatal)",
+    "Conselho de Medicina (CRM) Serviço Hemodiálise", "Conselho de Medicina (CRM) Serviço (UTI Pediátrica)", "Conselho de Enfermagem (COREN) Serviço (Nefrologia)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI Neonatal)", "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 2)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 3)", "Conselho de Enfermagem (COREN) Serviço (UTI Pediátrica)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 1)", "Conselho de Enfermagem (COREN) Serviço (Vida & Imagem)",
+    "Carta de anuência tombamento", "Licença Sanitária Serviço (Fisioterapia)", "Licença Sanitária Serviço (Assistência Domiciliar)",
+    "Conselho de Medicina (CRM) Serviço (Ergometria)", "Certificado de acessibilidade", "Conselho de Farmácia (CRF) Serviço - Farmácia de Manipulação",
+    "Licença Sanitária (Tomografia)", "Licença Sanitária Serviço (Transplante de Fígado)", "Conselho de Enfermagem (COREN) Serviço - Hemodinâmica",
+    "Polícia Federal (Licença)", "Conselho de Medicina (CRM) Serviço Hemodinamica", "Conselho de Farmácia (CRF) Serviço - Farmácia Hospitalar",
+    "Licença Sanitária Serviço (Equipamento 9)", "Licença Sanitária Serviço (Equipamento 7)", "Licença Sanitária Serviço (Equipamento 8)",
+    "Licença Sanitária Serviço (Equipamento 15)", "Termo de aceite de sinalização de vaga para deficiente e idoso", "Licença Sanitária Serviço (Equipamento 21)",
+    "Licença Sanitária Serviço (Equipamento 18)", "Licença Sanitária Serviço (Equipamento 19)", "Licença Sanitária Serviço (Hemodiálise)",
+    "Licença Sanitária Serviço (Transplante de Medula Óssea)", "Cadastro de tanques, bombas e equipamentos afins", "Licença Sanitária Serviço (Equipamento 22)",
+    "Licença Sanitária Serviço (Equipamento 11)", "Licença Sanitária Serviço (Equipamento 17)", "Licença Sanitária Serviço (Equipamento 13)",
+    "Licença Sanitária Serviço (Equipamento 10)", "Licença Sanitária Serviço (Equipamento 16)", "Licença Sanitária Serviço (Equipamento 12)",
+    "Licença Sanitária Serviço (Transplante de Rim)", "Licença Sanitária Serviço (Equipamento 14)", "Licença Sanitária Serviço (Equipamento 20)",
+    "Licença Sanitária Serviço (Ambulância)", "Licença Sanitária Serviço (Captação)", "Licença Sanitária Serviço (Registro gráfico, ECG. EEG)",
+    "Licença Sanitária Serviço (Tomografia)", "Conselho de Farmácia (CRF) Serviço - Posto de Coleta", "Licença Sanitária Serviço (Remoção de pacientes)",
+    "Licença Sanitária Serviço (Endoscopia)", "Licença Sanitária Serviço (Pronto Socorro)", "Conselho de Enfermagem (COREN) Serviço (Ambulatorial)",
+    "Conselho de Biomedicina (CRBM) Serviço - Banco de Sangue", "Conselho de Enfermagem (COREN) Serviço (CME)", "Conselho de Enfermagem (COREN) Serviço (UTI)",
+    "Conselho de Medicina (CRM) Serviço (Transplante de Médula Óssea)", "Licença Sanitária Serviço (UTI Adulto)", "Conselho de Medicina (CRM) Serviço (Obstetrícia)",
+    "Licença Sanitária Serviço (UTI Neonatal)", "Licença Sanitária Serviço (Posto de Coleta de Leite Humano)", "Conselho de Medicina (CRM) Serviço (Neonatologia)",
+    "Conselho de Medicina (CRM) Serviço (TME - Transplante de Músculo Esquelético)", "Conselho de Enfermagem (COREN) Serviço (Centro Cirúrgico)",
+    "Conselho de Enfermagem (COREN) Serviço (Internação)", "Conselho de Enfermagem (COREN) Serviço (Maternidade)", "Licença Sanitária Serviço (Fonoaudiologia)",
+    "Licença Sanitária Serviço (Psicologia)", "Licença Sanitária Serviço (Procedimentos Cirúrgicos)", "Licença Sanitária Serviço (Consultório Isolado)",
+    "Conselho de Medicina (CRM) Serviço (Emergência)", "Conselho de Medicina (CRM) Serviço (Pediatria)", "Conselho de Medicina (CRM) - Diálise",
+    "Licença Sanitária Serviço (UTI Mista)", "Projeto Arquitetonico (Visa e Prefeitura)", "Habite-se", "SDR", "SMOP", "Alvará de Obra", "Outros"
 ]
 LISTA_TIPOS_DOCUMENTOS = sorted(list(set(LISTA_TIPOS_DOCUMENTOS)))
 
@@ -246,7 +155,7 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
-@st.cache_data(ttl=INTERVALO_GERAL)
+@st.cache_data(ttl=60) # Cache de 1 min para leitura inicial
 def carregar_tudo_inicial():
     try:
         sh = conectar_gsheets()
@@ -296,28 +205,20 @@ def update_dados_local(df_p, df_c):
 def salvar_alteracoes_completo(df_prazos, df_checklist):
     try:
         sh = conectar_gsheets()
-        
-        # 1. Salvar df_prazos
         ws_prazos = sh.worksheet("Prazos")
         ws_prazos.clear()
         df_p = df_prazos.copy()
-        
         if 'ID_UNICO' in df_p.columns: df_p = df_p.drop(columns=['ID_UNICO'])
-        
         for c_date in ['Vencimento', 'Data_Recebimento']:
             df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
-            
         df_p['Concluido'] = df_p['Concluido'].astype(str)
         df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
-        
         colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
         for c in colunas_ordem: 
             if c not in df_p.columns: df_p[c] = ""
         df_p = df_p[colunas_ordem]
-
         ws_prazos.update([df_p.columns.values.tolist()] + df_p.values.tolist())
         
-        # 2. Salvar df_checklist
         ws_check = sh.worksheet("Checklist_Itens")
         ws_check.clear()
         df_c = df_checklist.copy()
@@ -404,7 +305,10 @@ def gerar_pdf(vistorias):
 
 # --- INTERFACE ---
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
-if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notificacao'] = datetime.min
+# --- CONTROLE DOS TIMERS DE NOTIFICAÇÃO ---
+if 'last_notify_critico' not in st.session_state: st.session_state['last_notify_critico'] = datetime.min
+if 'last_notify_alto' not in st.session_state: st.session_state['last_notify_alto'] = datetime.min
+
 if 'doc_focado_id' not in st.session_state: st.session_state['doc_focado_id'] = None
 if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TODOS"
 
@@ -426,31 +330,66 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v35.0 - Com Exclusão Total")
+    st.caption("v36.0 - Robô Inteligente")
 
-# --- ROBÔ ---
+# --- ROBÔ INTELIGENTE V2 ---
 try:
     agora = datetime.now()
-    diff = (agora - st.session_state['ultima_notificacao']).total_seconds() / 60
+    
+    # Verifica Timers
+    diff_crit = (agora - st.session_state['last_notify_critico']).total_seconds() / 60
+    diff_alto = (agora - st.session_state['last_notify_alto']).total_seconds() / 60
+    
+    # Carrega dados
     df_alertas = get_dados()[0]
     
-    if df_alertas is not None and diff >= INTERVALO_GERAL:
-        lista_alerta = []
+    if df_alertas is not None:
+        msgs_crit = []
+        msgs_alto = []
         hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).date()
+        
         for index, row in df_alertas.iterrows():
             try:
-                dias = (row['Vencimento'] - hoje).days
+                # 1. FILTRO: Ignora não editados (Pendentes/Selecione) e Normais
+                doc_nome = str(row['Documento'])
+                if "SELECIONE" in doc_nome or "PENDENTE" in doc_nome: continue
+                if row['Status'] == "NORMAL": continue
+                
+                # 2. FILTRO: Ignora Concluídos (Progresso 100%)
                 prog = safe_prog(row['Progresso'])
-                if dias < 0 and prog < 100: lista_alerta.append(f"⛔ ATRASADO: {row['Documento']}")
-                elif dias <= 5 and prog < 100: lista_alerta.append(f"⚠️ VENCE EM {dias} DIAS: {row['Documento']}")
+                if prog >= 100: continue
+
+                dias = (row['Vencimento'] - hoje).days
+                unidade = row['Unidade']
+                risco = row['Status']
+                
+                # Monta mensagem
+                msg = f"🏥 {unidade}\n📄 {doc_nome}\n⏳ Vence em {dias} dias"
+                
+                # 3. Lógica de Agrupamento
+                if risco == "CRÍTICO" and (dias <= 5 or dias < 0):
+                    msgs_crit.append(msg)
+                elif risco == "ALTO" and (dias <= 5 or dias < 0):
+                    msgs_alto.append(msg)
+                    
             except: pass
-        if lista_alerta:
-            msg = "\n".join(lista_alerta[:5])
-            if len(lista_alerta) > 5: msg += "\n..."
-            enviar_notificacao_push(f"🚨 ALERTAS", msg, "high")
-            st.session_state['ultima_notificacao'] = agora
-            st.toast("🤖 Alertas enviados!")
-except: pass
+        
+        # 4. ENVIO CONDICIONAL POR TIMER
+        # CRÍTICO (A cada 60 min)
+        if msgs_crit and diff_crit >= 60:
+            corpo = "\n----------------\n".join(msgs_crit[:10]) # Limita a 10 para não explodir
+            if len(msgs_crit) > 10: corpo += f"\n... e mais {len(msgs_crit)-10} itens."
+            if enviar_notificacao_push("🚨 ALERTA CRÍTICO (1h)", corpo, "high"):
+                st.session_state['last_notify_critico'] = agora
+        
+        # ALTO (A cada 180 min / 3h)
+        if msgs_alto and diff_alto >= 180:
+            corpo = "\n----------------\n".join(msgs_alto[:10])
+            if len(msgs_alto) > 10: corpo += f"\n... e mais {len(msgs_alto)-10} itens."
+            if enviar_notificacao_push("🟠 ALERTA ALTO (3h)", corpo, "default"):
+                st.session_state['last_notify_alto'] = agora
+
+except Exception as e: pass
 
 # --- TELAS ---
 
@@ -611,14 +550,9 @@ elif menu == "Gestão de Docs":
             confirm = st.checkbox("Sim, quero excluir tudo")
             if confirm:
                 if st.button("❌ EXCLUIR TODA A LISTA", type="primary"):
-                    # Create empty DFs
                     df_prazos = pd.DataFrame(columns=["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "ID_UNICO"])
                     df_checklist = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
-
-                    # Save to cloud
                     salvar_alteracoes_completo(df_prazos, df_checklist)
-
-                    # Clear session
                     st.session_state['doc_focado_id'] = None
                     st.success("Tudo excluído!")
                     time.sleep(1)
@@ -648,7 +582,9 @@ elif menu == "Gestão de Docs":
                      if c_edit_btn.button("Salvar Tipo"):
                         antigo_id = doc_ativo_id
                         nova_unidade = df_prazos.at[idx, 'Unidade']
-                        novo_id = nova_unidade + " - " + novo_nome_doc
+                        # Recria ID com CNPJ para garantir unicidade
+                        cnpj_atual = df_prazos.at[idx, 'CNPJ']
+                        novo_id = nova_unidade + " - " + cnpj_atual + " - " + novo_nome_doc
                         
                         df_prazos.at[idx, 'Documento'] = novo_nome_doc
                         df_prazos.at[idx, 'ID_UNICO'] = novo_id
