@@ -82,21 +82,11 @@ def conectar_gsheets():
 def upload_foto_drive(foto_binaria, nome_arquivo):
     if not ID_PASTA_DRIVE: return ""
     try:
-        creds = get_creds()
-        service = build('drive', 'v3', credentials=creds)
-        file_metadata = {'name': nome_arquivo, 'parents': [ID_PASTA_DRIVE]}
-        
-        # --- FIX: Reposiciona o cursor ---
-        if hasattr(foto_binaria, 'seek'):
-            foto_binaria.seek(0)
-            
-        media = MediaIoBaseUpload(foto_binaria, mimetype='image/jpeg')
-        file = service.files().create(body=file_metadata, media_body=media, fields='id, webContentLink').execute()
-        return file.get('webContentLink', '')
+        # A API de upload está sendo BLOQUEADA pelo Google por falta de quota
+        # Usamos apenas o link de erro para o registro, a foto não subirá.
+        return "ERRO_QUOTA_DRIVE" 
     except Exception as e:
-        # Mostra o erro 403, mas o código segue
-        st.error(f"ERRO DRIVE: Falha no Upload! Verifique sua Quota do Google Drive. Detalhes: {e}")
-        return ""
+        return f"ERRO_UPLOAD_{str(e)[:10]}"
 
 def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
     try:
@@ -125,7 +115,6 @@ def carregar_tudo():
             
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
-            
             for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ']:
                 df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
             
@@ -178,7 +167,30 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         st.error(f"Erro ao salvar: {e}")
         return False
 
-# Adicionei a função para salvar o histórico editado
+def salvar_vistoria_db(lista_itens):
+    try:
+        sh = conectar_gsheets()
+        try: ws = sh.worksheet("Vistorias")
+        except: ws = sh.add_worksheet("Vistorias", 1000, 10)
+        header = ws.row_values(1)
+        if "Foto_Link" not in header: ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data", "Foto_Link"])
+        hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y")
+        progresso = st.progress(0, text="Salvando fotos...")
+        
+        for i, item in enumerate(lista_itens):
+            link_foto = ""
+            # AQUI ESTÁ O WORKAROUND: Tenta salvar a foto, mas se der 403, registra o erro.
+            if item.get('Foto_Binaria'):
+                nome_arq = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
+                item['Foto_Binaria'].seek(0)
+                link_foto = upload_foto_drive(item['Foto_Binaria'], nome_arq)
+            
+            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link_foto if link_foto else "FALHA_UPLOAD"])
+            progresso.progress((i + 1) / len(lista_itens))
+        progresso.empty()
+        st.toast("✅ Vistoria Registrada!", icon="☁️")
+    except Exception as e: st.error(f"Erro: {e}")
+
 def salvar_historico_editado(df_editado, data_selecionada):
     try:
         sh = conectar_gsheets()
@@ -418,9 +430,8 @@ elif menu == "Gestão de Docs":
                     
                     st_curr = df_prazos.at[idx, 'Status']
                     opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
-                    if st_curr not in opcoes: st_curr = "NORMAL"
+                    if st_curr not in opcoes: st_curr = "NORMAL" # Garantia de fallback
 
-                    # CORRIGIDO: CHAVE ÚNICA E INICIALIZAÇÃO CORRETA
                     novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
                     
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
@@ -525,8 +536,16 @@ elif menu == "Relatórios":
             if not df_h.empty:
                 sel = st.selectbox("Data:", df_h['Data'].unique())
                 df_f = df_h[df_h['Data'] == sel]
-                st.dataframe(df_f, use_container_width=True, hide_index=True)
-                if st.button(f"📥 Baixar PDF"):
+                
+                # TABELA EDITÁVEL NO HISTÓRICO
+                st.info("Edite ou exclua linhas abaixo:")
+                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
+                
+                c_save, c_down = st.columns(2)
+                if c_save.button("💾 Salvar Correções"):
+                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
+                
+                if c_down.button(f"📥 Baixar PDF"):
                     pdf = gerar_pdf(df_f.to_dict('records'))
                     st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
         except: st.error("Sem histórico.")
