@@ -17,7 +17,7 @@ st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wi
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 
 # --- INTERVALOS DE NOTIFICAÇÃO (EM MINUTOS) ---
-INTERVALO_GERAL = 60 # O Robô vai checar e mandar o resumo a cada 60 minutos
+INTERVALO_GERAL = 60 
 
 # --- AUTO-REFRESH (60 segundos) ---
 refresh_code = """
@@ -64,32 +64,26 @@ def conectar_gsheets():
     return client.open("LegalizaHealth_DB")
 
 def enviar_resumo_push(lista_problemas):
-    """
-    Envia UMA única notificação com a lista de problemas
-    Isso evita a cascata de mensagens.
-    """
+    """Envia UMA única notificação com a lista de problemas"""
     qtd = len(lista_problemas)
     if qtd == 0: return False
 
-    # Define urgência baseado no pior caso
     tem_atrasado = any("ATRASADO" in p['status'] for p in lista_problemas)
     
     if tem_atrasado:
         titulo = f"⛔ URGENTE: {qtd} Pendências Graves"
         tags = "rotating_light,skull"
-        prio = "urgent" # Toca alto
+        prio = "urgent"
     else:
         titulo = f"⚠️ ALERTA: {qtd} Prazos Próximos"
         tags = "warning"
         prio = "high"
 
-    # Monta o texto do resumo (Máximo 5 linhas para não cortar)
     mensagem = "Resumo da Situação:\n"
     for p in lista_problemas[:5]:
         mensagem += f"- {p['doc']} ({p['status']})\n"
     
-    if qtd > 5:
-        mensagem += f"...e mais {qtd-5} itens."
+    if qtd > 5: mensagem += f"...e mais {qtd-5} itens."
 
     try:
         requests.post(
@@ -98,8 +92,7 @@ def enviar_resumo_push(lista_problemas):
             headers={"Title": titulo.encode('utf-8'), "Priority": prio, "Tags": tags}
         )
         return True
-    except:
-        return False
+    except: return False
 
 def sincronizar_prazos_completo(df_novo):
     try:
@@ -108,9 +101,7 @@ def sincronizar_prazos_completo(df_novo):
         ws.clear()
         df_salvar = df_novo.copy()
         df_salvar['Concluido'] = df_salvar['Concluido'].astype(str)
-        # Garante data como string
         df_salvar['Vencimento'] = df_salvar['Vencimento'].astype(str).replace("NaT", "")
-        
         lista_dados = [df_salvar.columns.values.tolist()] + df_salvar.values.tolist()
         ws.update(lista_dados)
         st.toast("✅ Salvo na nuvem!", icon="☁️")
@@ -137,15 +128,12 @@ def carregar_dados_prazos():
         df = pd.DataFrame(dados)
         if "Concluido" not in df.columns: df["Concluido"] = "False"
         
-        # --- CORREÇÃO DA DATA (O SEGREDO) ---
-        # Forçamos o pandas a entender que o primeiro número é DIA (%d/%m/%Y)
-        # errors='coerce' transforma erros em NaT (que tratamos depois)
+        # --- CORREÇÃO DA DATA ---
         df['Vencimento'] = pd.to_datetime(df['Vencimento'], format="%d/%m/%Y", errors='coerce').dt.date
         
         df['Concluido'] = df['Concluido'].astype(str).str.upper() == 'TRUE'
         return df
-    except Exception as e:
-        # st.error(f"Erro ao ler datas: {e}") # Debug se precisar
+    except:
         return pd.DataFrame(columns=["Documento", "Vencimento", "Status", "Concluido"])
 
 def calcular_status(data_venc, concluido):
@@ -155,12 +143,11 @@ def calcular_status(data_venc, concluido):
     hoje = date.today()
     dias = (data_venc - hoje).days
     
-    # NOVAS REGRAS
     if dias < 0: return dias, "⛔ ATRASADO"
     elif dias == 0: return dias, "💥 VENCE HOJE"
-    elif dias <= 7: return dias, "🔴 CRÍTICO" # Até 7 dias
-    elif dias <= 10: return dias, "🟠 ALTO"   # Até 10 dias
-    else: return dias, "🟢 NORMAL"            # Acima de 10 dias
+    elif dias <= 7: return dias, "🔴 CRÍTICO"
+    elif dias <= 10: return dias, "🟠 ALTO"
+    else: return dias, "🟢 NORMAL"
 
 # --- PDF GENERATOR ---
 class PDF(FPDF):
@@ -194,17 +181,79 @@ if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notifi
 # Sidebar
 with st.sidebar:
     if img_loading:
-        st.markdown(f'<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px; margin-bottom:15px;"></div>', unsafe_allow_html=True)
+        # AQUI ESTAVA O ERRO - Corrigido com aspas triplas para segurança
+        st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px; margin-bottom:15px;"></div>""", unsafe_allow_html=True)
     else:
         st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=80)
     
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v4.2 - Ajuste de Datas e Push")
+    st.caption("v4.5 - Stable Release")
     menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Prazos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
-# --- ROBÔ DE RESUMO (EVITA CASCATA) ---
+# --- ROBÔ DE RESUMO ---
 try:
     agora = datetime.now()
-    # Verifica se já passou 60 minutos desde o último resumo
-    diferenca_tempo = (agora -
+    diferenca_tempo = (agora - st.session_state['ultima_notificacao']).total_seconds() / 60
+    
+    if diferenca_tempo >= INTERVALO_GERAL:
+        df_robo = carregar_dados_prazos()
+        lista_para_notificar = []
+        
+        for index, row in df_robo.iterrows():
+            if not row['Concluido']:
+                dias, status = calcular_status(row['Vencimento'], False)
+                if "CRÍTICO" in status or "ATRASADO" in status or "VENCE HOJE" in status or "ALTO" in status:
+                    lista_para_notificar.append({
+                        "doc": row['Documento'],
+                        "status": status.replace("🔴 ", "").replace("⛔ ", "").replace("💥 ", "")
+                    })
+        
+        if len(lista_para_notificar) > 0:
+            sucesso = enviar_resumo_push(lista_para_notificar)
+            if sucesso:
+                st.session_state['ultima_notificacao'] = agora
+                st.toast(f"🤖 Resumo enviado ({len(lista_para_notificar)} itens)")
+
+except Exception as e:
+    print(f"Erro robô: {e}")
+
+# --- 1. DASHBOARD ---
+if menu == "📊 Dashboard":
+    st.title("Painel de Controle")
+    
+    df = carregar_dados_prazos()
+    
+    criticos_lista = []
+    atencao_lista = []
+    df['Prazo_Txt'] = ""
+
+    for index, row in df.iterrows():
+        d, s = calcular_status(row['Vencimento'], row['Concluido'])
+        df.at[index, 'Status'] = s
+        
+        if s == "⚪ DATA INVÁLIDA": df.at[index, 'Prazo_Txt'] = "---"
+        elif d < 0: df.at[index, 'Prazo_Txt'] = f"🚨 {abs(d)} dias ATRASO"
+        elif d == 0: df.at[index, 'Prazo_Txt'] = "💥 VENCE HOJE"
+        else: df.at[index, 'Prazo_Txt'] = f"{d} dias restantes"
+        
+        if not row['Concluido']:
+            if "CRÍTICO" in s or "ATRASADO" in s or "VENCE HOJE" in s: criticos_lista.append(row)
+            if "ALTO" in s: atencao_lista.append(row)
+
+    n_criticos = len(criticos_lista)
+    n_atencao = len(atencao_lista)
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("🚨 Risco Imediato", n_criticos, delta="Ação Necessária" if n_criticos > 0 else "OK", delta_color="inverse")
+    c2.metric("🟠 Prioridade Alta", n_atencao, delta_color="off")
+    c3.metric("📋 Total", len(df))
+
+    st.markdown("---")
+    
+    if n_criticos > 0:
+        st.error(f"⚠️ Atenção! {n_criticos} documentos requerem sua ação.")
+        df_criticos = pd.DataFrame(criticos_lista)
+        st.dataframe(
+            df_criticos[['Documento', 'Vencimento', 'Prazo_Txt', 'Status']], 
+            use
