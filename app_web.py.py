@@ -154,6 +154,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_c['Feito'] = df_c['Feito'].astype(str)
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
         
+        st.toast("✅ Nuvem Sincronizada!", icon="☁️")
         return True
     except Exception as e:
         st.error(f"Erro salvar: {e}")
@@ -188,22 +189,26 @@ def carregar_historico_vistorias():
         return pd.DataFrame(ws.get_all_records())
     except: return pd.DataFrame()
 
-# --- PDF ---
+# --- PDF GENERATOR ---
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 12)
         self.cell(0, 10, 'Relatorio LegalizaHealth', 0, 1, 'C')
         self.ln(5)
+
 def limpar_txt(t):
     if not isinstance(t, str): t = str(t)
     t = t.replace("✅", "[OK]").replace("❌", "[X]").replace("🚨", "[!]").replace("⚠️", "[!]")
     return t.encode('latin-1', 'replace').decode('latin-1')
+
 def baixar_imagem_url(url):
     try:
-        resp = requests.get(url, timeout=10)
-        if resp.status_code == 200: return io.BytesIO(resp.content)
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return io.BytesIO(response.content)
     except: pass
     return None
+
 def gerar_pdf(vistorias):
     pdf = PDF()
     pdf.add_page()
@@ -212,9 +217,11 @@ def gerar_pdf(vistorias):
         pdf.cell(0, 10, f"Item #{i+1}: {limpar_txt(item.get('Item', ''))}", 0, 1)
         pdf.set_font("Arial", size=10)
         pdf.multi_cell(0, 6, f"Local: {limpar_txt(item.get('Setor',''))}\nObs: {limpar_txt(item.get('Obs',''))}")
+        
         img = None
         if 'Foto_Binaria' in item and item['Foto_Binaria']: img = item['Foto_Binaria']
         elif 'Foto_Link' in item and str(item['Foto_Link']).startswith('http'): img = baixar_imagem_url(item['Foto_Link'])
+            
         if img:
             try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
@@ -246,6 +253,7 @@ try:
         for index, row in df_p.iterrows():
             try:
                 dias = (row['Vencimento'] - hoje).days
+                # Só alerta se o progresso não for 100%
                 if dias < 0 and row['Progresso'] < 100: lista_alerta.append(f"⛔ ATRASADO: {row['Documento']}")
                 elif dias <= 5 and row['Progresso'] < 100: lista_alerta.append(f"⚠️ VENCE EM {dias} DIAS: {row['Documento']}")
             except: pass
@@ -337,7 +345,7 @@ elif menu == "📅 Gestão de Documentos":
                 status_atual = df_prazos.at[idx, 'Status']
                 opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
                 if status_atual not in opcoes: status_atual = "NORMAL"
-                novo_status = c1.selectbox("Risco", opcoes, index=opcoes.index(status_atual))
+                novo_status = c1.selectbox("Risco", opcoes, index=opcoes.index(status_atual), key="sel_risco")
                 df_prazos.at[idx, 'Status'] = novo_status
                 
                 # Edição de Data
