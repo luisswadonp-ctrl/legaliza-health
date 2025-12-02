@@ -285,7 +285,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v33.1 - Correção Duplo Clique")
+    st.caption("v33.2 - Correção Check Sumindo")
 
 # --- ROBÔ ---
 try:
@@ -573,10 +573,8 @@ elif menu == "Gestão de Docs":
                     done = edited['Feito'].sum()
                     new_p = int((done/tot)*100) if tot > 0 else 0
                     
-                    # 1. Atualiza visual imediatamente
                     prog_bar_placeholder.progress(new_p, text=f"Progressão: {new_p}%")
                     
-                    # 2. Atualiza dados locais (se mudou algo)
                     if not edited.equals(df_t) or new_p != prog_atual:
                         df_prazos.at[idx, 'Progresso'] = new_p
                         
@@ -584,6 +582,8 @@ elif menu == "Gestão de Docs":
                         edited['Documento_Ref'] = str(doc_ativo_id)
                         df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
                         update_dados_local(df_prazos, df_checklist)
+                        # Rerun para garantir que o checkbox não suma
+                        st.rerun()
 
                 else: st.info("Adicione tarefas acima.")
 
