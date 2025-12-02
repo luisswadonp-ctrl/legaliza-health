@@ -32,6 +32,52 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_GERAL = 120 
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ" 
 
+# --- OPÇÕES DE DOCUMENTOS (LISTA VASTA) ---
+OPCOES_DOCUMENTO = [
+    "Licença de Publicidade", "Conselho de Medicina (CRM)", "Conselho de Farmácia (CRF)", "Licença Sanitária",
+    "Conselho de Enfermagem (COREN)", "CNES", "Inscrição Municipal", "Licença Ambiental", "Alvará de Funcionamento",
+    "Corpo de Bombeiros", "Polícia Civil (Termo de Vistoria)", "Polícia Civil (Licença)", "Conselho de Biomedicina (CRBM)",
+    "Conselho de Biologia (CRBio)", "Conselho de Biomedicina (CRBM) Serviço - Laboratório", "Licença Sanitária Serviço (Laboratório)",
+    "Conselho de Biomedicina (CRBM) Serviço - Posto de Coleta", "Licença Sanitária Serviço (Dispensário)", "Conselho de Nutrição (CRN)",
+    "Conselho de Psicologia (CRP)", "Licença Sanitária Serviço (Farmácia)", "Conselho de Radiologia (CRTR)", "Conselho de Fisioterapia e Terapia Ocupacional (CREFITO)",
+    "Licença Sanitária Serviço (Cozinha/Nutrição)", "Licença Sanitária Serviço (Radiologia)", "Conselho de Fonoaudiologia (CREFONO)",
+    "Licença Sanitária Serviço (Oncologia)", "Licença Sanitária Serviço (Equipamento)", "Licença Sanitária Serviço (Ag. Transfusional)",
+    "Licença Sanitária Serviço (Clínica)", "Conselho de Medicina (CRM) Serviço (Oncologia)", "Conselho de Medicina (CRM) Serviço (Radiologia Clinica)",
+    "Conselho de Medicina (CRM) Serviço (Banco de Sangue)", "Conselho de Enfermagem (COREN) Serviço (Urgência/Emergência)", "Licença Sanitária Serviço (Vacinas)",
+    "Licença Sanitária Serviço (Quimioterapia)", "Conselho de Enfermagem (COREN) Serviço (Oncologia)", "Licença Sanitária Serviço (Equipamento 1)",
+    "Licença Sanitária Serviço (Equipamento 3)", "Licença Sanitária Serviço (Equipamento 5)", "Licença Sanitária Serviço (Equipamento 4)",
+    "Licença Sanitária Serviço (Equipamento 2)", "Conselho de Enfermagem (COREN) Serviço (Quimioterapia)", "Conselho de Farmácia (CRF) Serviço (Oncologia)",
+    "Licença Sanitária Serviço (Ultrassom)", "Licença Sanitária Serviço (SADT - Apoio Diagnóstico Terapêutico)", "Licença Sanitária Serviço (Equipamento 6)",
+    "Declaração de Trâmite Vigilância", "Licença do Comando da Aeronáutica (COMAER)", "Certificado de Manutenção do Sistema de Segurança",
+    "Conselho de Odontologia (CRO)", "Licença Sanitária Serviço (Hemoterapia)", "Licença Sanitária Serviço (Transplante Musculo Esquelético)",
+    "Licença Sanitária Serviço (Hemodinâmica)", "Conselho de Farmácia (CRF) Serviço - Laboratório", "Conselho de Medicina (CRM) Serviço (Endoscopia)",
+    "Conselho de Medicina (CRM) Serviço (UTI Adulto)", "Conselho de Medicina (CRM) Serviço (UTI Neonatal)", "Conselho de Medicina (CRM) Serviço Hemodiálise",
+    "Conselho de Medicina (CRM) Serviço (UTI Pediátrica)", "Conselho de Enfermagem (COREN) Serviço (Nefrologia)", "Conselho de Enfermagem (COREN) Serviço (UTI Neonatal)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 2)", "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 3)", "Conselho de Enfermagem (COREN) Serviço (UTI Pediátrica)",
+    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 1)", "Conselho de Enfermagem (COREN) Serviço (Vida & Imagem)", "Carta de anuência tombamento",
+    "Licença Sanitária Serviço (Fisioterapia)", "Licença Sanitária Serviço (Assistência Domiciliar)", "Conselho de Medicina (CRM) Serviço (Ergometria)",
+    "Certificado de acessibilidade", "Conselho de Farmácia (CRF) Serviço - Farmácia de Manipulação", "Licença Sanitária (Tomografia)",
+    "Licença Sanitária Serviço (Transplante de Fígado)", "Conselho de Enfermagem (COREN) Serviço - Hemodinâmica", "Polícia Federal (Licença)",
+    "Conselho de Medicina (CRM) Serviço Hemodinamica", "Conselho de Farmácia (CRF) Serviço - Farmácia Hospitalar", "Licença Sanitária Serviço (Equipamento 9)",
+    "Licença Sanitária Serviço (Equipamento 7)", "Licença Sanitária Serviço (Equipamento 8)", "Licença Sanitária Serviço (Equipamento 15)",
+    "Termo de aceite de sinalização de vaga para deficiente e idoso", "Licença Sanitária Serviço (Equipamento 21)", "Licença Sanitária Serviço (Equipamento 18)",
+    "Licença Sanitária Serviço (Equipamento 19)", "Licença Sanitária Serviço (Hemodiálise)", "Licença Sanitária Serviço (Transplante de Medula Óssea)",
+    "Cadastro de tanques, bombas e equipamentos afins", "Licença Sanitária Serviço (Equipamento 22)", "Licença Sanitária Serviço (Equipamento 11)",
+    "Licença Sanitária Serviço (Equipamento 17)", "Licença Sanitária Serviço (Equipamento 13)", "Licença Sanitária Serviço (Equipamento 10)",
+    "Licença Sanitária Serviço (Equipamento 16)", "Licença Sanitária Serviço (Equipamento 12)", "Licença Sanitária Serviço (Transplante de Rim)",
+    "Licença Sanitária Serviço (Equipamento 14)", "Licença Sanitária Serviço (Equipamento 20)", "Licença Sanitária Serviço (Ambulância)",
+    "Licença Sanitária Serviço (Captação)", "Licença Sanitária Serviço (Registro gráfico, ECG. EEG)", "Licença Sanitária Serviço (Tomografia)",
+    "Conselho de Farmácia (CRF) Serviço - Posto de Coleta", "Licença Sanitária Serviço (Remoção de pacientes)", "Licença Sanitária Serviço (Endoscopia)",
+    "Licença Sanitária Serviço (Pronto Socorro)", "Conselho de Enfermagem (COREN) Serviço (Ambulatorial)", "Conselho de Biomedicina (CRBM) Serviço - Banco de Sangue",
+    "Conselho de Enfermagem (COREN) Serviço (CME)", "Conselho de Enfermagem (COREN) Serviço (UTI)", "Conselho de Medicina (CRM) Serviço (Transplante de Médula Óssea)",
+    "Licença Sanitária Serviço (UTI Adulto)", "Conselho de Medicina (CRM) Serviço (Obstetrícia)", "Licença Sanitária Serviço (UTI Neonatal)",
+    "Licença Sanitária Serviço (Posto de Coleta de Leite Humano)", "Conselho de Medicina (CRM) Serviço (Neonatologia)", "Conselho de Medicina (CRM) Serviço (TME - Transplante de Músculo Esquelético)",
+    "Conselho de Enfermagem (COREN) Serviço (Centro Cirúrgico)", "Conselho de Enfermagem (COREN) Serviço (Internação)", "Conselho de Enfermagem (COREN) Serviço (Maternidade)",
+    "Licença Sanitária Serviço (Fonoaudiologia)", "Licença Sanitária Serviço (Psicologia)", "Licença Sanitária Serviço (Procedimentos Cirúrgicos)",
+    "Licença Sanitária Serviço (Consultório Isolado)", "Conselho de Medicina (CRM) Serviço (Emergência)", "Conselho de Medicina (CRM) Serviço (Pediatria)",
+    "Conselho de Medicina (CRM) - Diálise", "Licença Sanitária Serviço (UTI Mista)", "Projeto Arquitetonico (Visa e Prefeitura)", "Habite-se", "SDR", "SMOP", "Alvará de Obra"
+]
+
 # --- AUTO-REFRESH ---
 components.html("""
 <script>
@@ -103,27 +149,27 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
-# --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS (AUTÔNOMO E ROBUSTO) ---
+# --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS (AUTÔNOMO) ---
 def processar_dados_importados(uploaded_file):
-    """Mapeia o DataFrame importado autonomamente e garante a leitura completa."""
+    """Mapeia o DataFrame importado autonomamente."""
+    df = pd.DataFrame()
     
-    # 1. Leitura Robusta (Usando buffer para evitar erro de arquivo)
-    bytes_data = uploaded_file.getvalue()
-    
+    # 1. Leitura Robusta
     if uploaded_file.name.endswith('.csv'):
-        # Tenta ler com diferentes delimitadores para maior robustez
-        try: # Tenta ponto e vírgula (BR)
-            df = pd.read_csv(io.BytesIO(bytes_data), encoding='latin1', sep=';')
+        uploaded_file.seek(0)
+        try:
+            df = pd.read_csv(uploaded_file, encoding='latin1', sep=';')
         except:
-            try: # Tenta vírgula (US/padrão)
-                df = pd.read_csv(io.BytesIO(bytes_data), encoding='utf-8', sep=',')
+            uploaded_file.seek(0)
+            try:
+                df = pd.read_csv(uploaded_file, encoding='utf-8', sep=',')
             except Exception as e:
-                 st.error(f"Erro de leitura de CSV: Verifique se o arquivo está bem formatado.")
+                 st.error(f"Erro de leitura de CSV: Tente salvar o arquivo como CSV com delimitador ponto-e-vírgula.")
                  return pd.DataFrame()
                  
     elif uploaded_file.name.endswith(('.xlsx', '.xls')):
         try:
-            df = pd.read_excel(io.BytesIO(bytes_data), engine='openpyxl')
+            df = pd.read_excel(uploaded_file, engine='openpyxl')
         except Exception as e:
             st.error(f"Erro de leitura de Excel: {e}")
             return pd.DataFrame()
@@ -159,7 +205,7 @@ def processar_dados_importados(uploaded_file):
         else:
             df_result[col_final] = val
             
-    # Limpeza de Documento
+    # Limpeza de Documento (Usa o melhor nome)
     doc_base = df_result.get('Documento', pd.Series([''] * len(df_result)))
     df_result['Documento'] = doc_base.apply(lambda x: x if x else 'Não Definido')
 
