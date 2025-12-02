@@ -63,7 +63,7 @@ st.markdown("""
     /* Cards de Métricas */
     div[data-testid="metric-container"] {
         background-color: #1f2937; border: 1px solid #374151;
-        padding: 20px; border-radius: 12px;
+        padding: 15px; border-radius: 10px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
     
@@ -73,6 +73,12 @@ st.markdown("""
         background-image: linear-gradient(to right, #2563eb, #1d4ed8);
         border: none; color: white;
     }
+    
+    /* Títulos */
+    h1, h2, h3 { font-family: 'Segoe UI', sans-serif; font-weight: 600; color: #f0f2f6; }
+    
+    /* Ajuste de tabela */
+    [data-testid="stDataFrame"] { width: 100%; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -120,18 +126,23 @@ def carregar_tudo():
             ws_check.append_row(["Documento_Ref", "Tarefa", "Feito"])
             df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
-        colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
+        colunas = ["Unidade", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
         for c in colunas:
             if c not in df_prazos.columns: df_prazos[c] = ""
             
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
+            # Força conversão para string do Documento para evitar erro de tipos mistos
+            df_prazos['Documento'] = df_prazos['Documento'].astype(str)
             for c_date in ['Vencimento', 'Data_Recebimento']:
                 df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
         
-        if df_check.empty: df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
-        else: df_check = df_check[df_check['Tarefa'] != ""]
+        if df_check.empty: 
+            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+        else:
+            df_check['Documento_Ref'] = df_check['Documento_Ref'].astype(str)
+            df_check = df_check[df_check['Tarefa'] != ""]
         
         return df_prazos, df_check
     except Exception as e:
@@ -143,13 +154,10 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_prazos = sh.worksheet("Prazos")
         ws_prazos.clear()
         df_p = df_prazos.copy()
-        
         for c_date in ['Vencimento', 'Data_Recebimento']:
             df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
-            
         df_p['Concluido'] = df_p['Concluido'].astype(str)
         df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
-        
         ws_prazos.update([df_p.columns.values.tolist()] + df_p.values.tolist())
         
         ws_check = sh.worksheet("Checklist_Itens")
@@ -231,7 +239,7 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v21.0 - Clean & Dynamic")
+    st.caption("v22.0 - Stable & Beautiful")
     menu = st.radio("Menu", ["📊 Painel de Controle", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -278,32 +286,42 @@ if menu == "📊 Painel de Controle":
     
     st.markdown("---")
     
-    col_graf, col_tab = st.columns([1, 2])
+    col_lista, col_graf = st.columns([1.8, 1]) # Mais espaço para tabela
+    
+    with col_lista:
+        f_atual = st.session_state['filtro_dash']
+        st.subheader(f"Lista de Processos ({f_atual})")
+        
+        df_show = df_p.copy()
+        if f_atual != "TODOS":
+            df_show = df_show[df_show['Status'] == f_atual]
+            
+        if not df_show.empty:
+            st.dataframe(
+                df_show[['Unidade', 'Documento', 'Vencimento', 'Progresso', 'Status']], 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Progresso": st.column_config.ProgressColumn("Prog", format="%d%%"),
+                    "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
+                    "Status": st.column_config.TextColumn("Risco", width="small")
+                }
+            )
+        else:
+            st.info("Nenhum item neste status.")
+
     with col_graf:
         st.subheader("Panorama")
         if not df_p.empty and TEM_PLOTLY:
             status_counts = df_p['Status'].value_counts()
-            fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.5,
+            fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
                 color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
-            fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
+            fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.1))
             st.plotly_chart(fig, use_container_width=True)
+            
             media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
-            st.metric("Progresso Geral", f"{media}%")
+            st.metric("Progresso Global", f"{media}%")
             st.progress(media)
-
-    with col_tab:
-        f_atual = st.session_state['filtro_dash']
-        st.subheader(f"Lista: {f_atual}")
-        df_show = df_p.copy()
-        if f_atual != "TODOS": df_show = df_show[df_show['Status'] == f_atual]
-        
-        if not df_show.empty:
-            st.dataframe(
-                df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso']], 
-                use_container_width=True, hide_index=True,
-                column_config={"Progresso": st.column_config.ProgressColumn("Prog", format="%d%%"), "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY")}
-            )
-        else: st.info("Nenhum item.")
 
 elif menu == "📅 Gestão de Documentos":
     st.title("Gestão de Documentos")
@@ -315,7 +333,7 @@ elif menu == "📅 Gestão de Documentos":
         lista_uni = ["Todas"] + sorted(list(df_prazos['Unidade'].unique())) if 'Unidade' in df_prazos.columns else ["Todas"]
         f_uni = f1.selectbox("Unidade:", lista_uni)
         f_stt = f2.multiselect("Status:", ["CRÍTICO", "ALTO", "NORMAL"])
-        f_txt = f3.text_input("Buscar (Nome/CNPJ/Setor):")
+        f_txt = f3.text_input("Buscar (Nome/CNPJ):")
         if st.button("Limpar"): st.rerun()
 
     df_show = df_prazos.copy()
@@ -325,24 +343,23 @@ elif menu == "📅 Gestão de Documentos":
 
     col_l, col_d = st.columns([1.2, 2])
     with col_l:
-        st.info(f"Encontrados: {len(df_show)}")
+        st.info(f"Lista ({len(df_show)})")
         sel = st.dataframe(df_show[['Unidade', 'Documento', 'Status']], use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun",
             column_config={"Status": st.column_config.TextColumn("Risco", width="small")})
         
         if len(sel.selection.rows) > 0:
-            st.session_state['doc_focado'] = df_show.iloc[sel.selection.rows[0]]['Documento']
+            # Captura o ID exato
+            doc_selecionado = df_show.iloc[sel.selection.rows[0]]['Documento']
+            st.session_state['doc_focado'] = doc_selecionado
         doc_ativo = st.session_state.get('doc_focado')
         
         st.markdown("---")
         with st.expander("➕ Novo Documento"):
             with st.form("new_doc", clear_on_submit=True):
-                n_u = st.text_input("Unidade")
-                n_s = st.text_input("Setor")
-                n_d = st.text_input("Documento")
-                n_c = st.text_input("CNPJ")
+                n_u = st.text_input("Unidade"); n_d = st.text_input("Documento"); n_c = st.text_input("CNPJ")
                 if st.form_submit_button("ADICIONAR"):
                     if n_d:
-                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
+                        novo = {"Unidade": n_u, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
                         df_prazos = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
                         salvar_alteracoes_completo(df_prazos, df_checklist)
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
@@ -354,7 +371,7 @@ elif menu == "📅 Gestão de Documentos":
             if not indices.empty:
                 idx = indices[0]
                 st.subheader(f"📝 {doc_ativo}")
-                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']}")
+                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
                 
                 c_del, _ = st.columns([1, 4])
                 if c_del.button("🗑️ Excluir"):
@@ -379,29 +396,31 @@ elif menu == "📅 Gestão de Documentos":
                     except: d_venc = date.today()
                     df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key="dt_venc")
                     
-                    prog = safe_prog(df_prazos.at[idx, 'Progresso'])
-                    st.progress(prog, text=f"Conclusão: {prog}%")
+                    prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
+                    st.progress(prog_atual, text=f"Conclusão: {prog_atual}%")
 
                 st.write("✅ **Tarefas**")
+                # Filtra checklist BLINDADO por documento
                 df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
-                mask = df_checklist['Documento_Ref'] == doc_ativo
+                # Força string para comparação segura
+                df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
+                mask = df_checklist['Documento_Ref'] == str(doc_ativo)
                 df_t = df_checklist[mask].copy()
                 
-                # ADICIONAR TAREFA
-                col_t_inp, col_t_btn = st.columns([3, 1])
-                new_t = col_t_inp.text_input("Nova tarefa...", label_visibility="collapsed")
-                if col_t_btn.button("ADICIONAR"):
+                c_add, c_btn = st.columns([3, 1])
+                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed")
+                if c_btn.button("ADICIONAR"):
                     if new_t:
                         line = pd.DataFrame([{"Documento_Ref": doc_ativo, "Tarefa": new_t, "Feito": False}])
+                        # Adiciona ao MESTRE, não ao filtrado
                         df_checklist = pd.concat([df_checklist, line], ignore_index=True)
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
                         st.rerun()
 
-                # Tabela Editável Dinâmica (Permite Delete)
                 if not df_t.empty:
                     edited = st.data_editor(
                         df_t, 
-                        num_rows="dynamic", # Permite adicionar e remover linhas
+                        num_rows="dynamic", 
                         use_container_width=True, 
                         hide_index=True,
                         column_config={
@@ -413,26 +432,25 @@ elif menu == "📅 Gestão de Documentos":
                     )
                     
                     # Cálculo Progresso
-                    total = len(edited)
-                    feitos = edited['Feito'].sum()
-                    new_p = int((feitos/total)*100) if total > 0 else 0
+                    tot = len(edited)
+                    done = edited['Feito'].sum()
+                    new_p = int((done/tot)*100) if tot > 0 else 0
                     
-                    if new_p != prog:
+                    # Se houve mudança no checklist
+                    if not edited.equals(df_t):
+                        # Remove as antigas do MESTRE e põe as novas
+                        df_checklist = df_checklist[~mask]
+                        edited['Documento_Ref'] = str(doc_ativo) # Garante ref
+                        df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
+                        
+                        # Atualiza progresso no MESTRE
                         df_prazos.at[idx, 'Progresso'] = new_p
+                        
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                    
-                    # Atualiza checklist mestre
-                    df_checklist = df_checklist[~mask]
-                    # Garante que novas linhas manuais tenham o ref correto
-                    edited['Documento_Ref'] = doc_ativo
-                    df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
-                    st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                    if new_p != prog: st.rerun()
+                        st.rerun()
                 
-                else: st.info("Adicione tarefas acima.")
-
                 st.markdown("---")
-                if st.button("💾 SALVAR TUDO", type="primary"):
+                if st.button("💾 SALVAR TUDO NA NUVEM", type="primary"):
                     if salvar_alteracoes_completo(df_prazos, df_checklist): time.sleep(0.5); st.rerun()
             else: st.warning("Não encontrado.")
         else: st.info("👈 Selecione um documento.")
