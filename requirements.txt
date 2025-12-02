@@ -8,5 +8,6 @@ requests
 pytz
 plotly
 streamlit-option-menu
+openpyxl
 
 
