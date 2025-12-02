@@ -14,6 +14,7 @@ import streamlit.components.v1 as components
 import pytz
 import io
 from streamlit_option_menu import option_menu 
+import chardet # Necessário para ler CSV com encoding confuso
 
 # Tenta importar Plotly
 try:
@@ -101,6 +102,71 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
+# --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS ---
+def processar_dados_importados(df_importado_raw, tipo_doc_base):
+    """Mapeia o DataFrame importado (CSV/Excel) para o formato do df_prazos."""
+    df = df_importado_raw.copy()
+    
+    # Normalização dos nomes das colunas
+    df.columns = [str(c).strip().replace('.', '').upper() for c in df.columns]
+    
+    # Mapeamento de Colunas (Candidatos)
+    col_map = {
+        'Unidade': ['NOME DA UNIDADE', 'UNIDADE'],
+        'CNPJ': ['CNPJ'],
+        'Setor': ['SETOR FISCALIZADO', 'SETOR'],
+        'Documento': ['TIPO DE DOCUMENTO', 'NOME DO DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO'],
+        'Vencimento': ['DATA LIMITE DE ATENDIMENTO', 'VENCIMENTO', 'SLA ESPERADO'],
+        'Data_Recebimento': ['DATA DO DOCUMENTO/RECEBIDO PELA UNIDADE', 'DATA INÍCIO', 'DATA ENVIO PGTO'],
+        'Status': ['STATUS DO PROCESSO', 'STATUS'],
+        'Comunicado': ['COMUNIQUE-SE/NOTIFICAÇÃO'], # Campo específico
+    }
+    
+    df_result = pd.DataFrame()
+    hoje = date.today()
+
+    # Mapeamento de Colunas
+    for col_final, col_candidatas in col_map.items():
+        col_encontrada = next((c for c in col_candidatas if c in df.columns), None)
+        
+        val = df[col_encontrada].astype(str).str.strip().fillna('') if col_encontrada else ''
+
+        if 'Data' in col_final or 'Vencimento' in col_final:
+            try: df_result[col_final] = pd.to_datetime(val, dayfirst=True, errors='coerce').dt.date.fillna(hoje)
+            except: df_result[col_final] = hoje
+        else:
+            df_result[col_final] = val
+            
+    # Combina Documento/Tipo
+    df_result['Documento'] = df_result['Documento'].apply(lambda x: x if x else tipo_doc_base)
+    
+    # Mapeamento de Status
+    status_map = {'CONCLUÍDO': 'NORMAL', 'QUITADO': 'NORMAL', 'EM ANDAMENTO': 'ALTO', 'PENDENTE': 'CRÍTICO', 'VENCIDO': 'CRÍTICO', 'EM PGTO': 'ALTO'}
+    df_result['Status'] = df_result.get('Status', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
+    
+    # Preenchimento de campos vazios com info amigável (Conforme solicitado)
+    df_result['Unidade'] = df_result['Unidade'].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
+    df_result['Setor'] = df_result['Setor'].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
+    df_result['CNPJ'] = df_result['CNPJ'].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
+    
+    # Limpa linhas sem Unidade ou Documento (mínimo necessário)
+    df_result = df_result[df_result['Unidade'] != 'Não Informado'].reset_index(drop=True)
+    
+    # Campos padrão
+    df_result['Progresso'] = 0
+    df_result['Concluido'] = 'False'
+    
+    colunas_finais = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
+    
+    # Adiciona colunas faltantes antes de retornar (ex: Comunicado, se não veio no import)
+    for col in colunas_finais:
+        if col not in df_result.columns:
+            df_result[col] = ''
+            
+    return df_result[colunas_finais].copy()
+
+# --- FUNÇÕES DE CONEXÃO E SALVAMENTO ---
+
 def carregar_tudo():
     try:
         sh = conectar_gsheets()
@@ -114,14 +180,14 @@ def carregar_tudo():
             ws_check.append_row(["Documento_Ref", "Tarefa", "Feito"])
             df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
-        colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
+        colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
         for c in colunas:
             if c not in df_prazos.columns: df_prazos[c] = ""
             
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
             
-            for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ']:
+            for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ', 'Comunicado']:
                 df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
             
             for c_date in ['Vencimento', 'Data_Recebimento']:
@@ -154,7 +220,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_p['Concluido'] = df_p['Concluido'].astype(str)
         df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
         
-        colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
+        colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Comunicado"]
         for c in colunas_ordem: 
             if c not in df_p.columns: df_p[c] = ""
         df_p = df_p[colunas_ordem]
@@ -275,7 +341,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v34.0 - Final Bugfix")
+    st.caption("v34.0 - Import Final")
 
 # --- ROBÔ ---
 try:
@@ -331,7 +397,7 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # 1. TABELA DE ALERTA
+    # 1. TABELA DE ALERTA (Prioridade no Mobile)
     f_atual = st.session_state['filtro_dash']
     st.subheader(f"Lista de Processos: {f_atual}")
     df_show = df_p.copy()
@@ -402,11 +468,12 @@ elif menu == "Gestão de Docs":
         doc_ativo_id = st.session_state.get('doc_focado_id')
         
         st.markdown("---")
-
-        # --- BLOCO DE IMPORTAÇÃO ---
+        
+        # --- BLOCO DE IMPORTAÇÃO (RE-INTEGRADO) ---
         with st.expander("⬆️ Importação em Massa"):
             with st.form("import_docs", clear_on_submit=True):
                 uploaded_file = st.file_uploader("Selecione o arquivo (CSV/Excel)", type=['csv', 'xlsx'])
+                # Opções de tipo
                 tipo_import = st.selectbox("Documento Principal:", 
                                             ["COMUNIQUE-SE/NOTIFICAÇÃO", "PROCESSO EM ANDAMENTO", "TAXA", "OUTROS"], 
                                             key="tipo_import")
@@ -437,11 +504,11 @@ elif menu == "Gestão de Docs":
                     else:
                         st.warning("Por favor, carregue um arquivo primeiro.")
 
+    with col_d:
         # --- BLOCO DE PRÉ-VISUALIZAÇÃO (Import) ---
         if 'df_import_preview' in st.session_state and not st.session_state['df_import_preview'].empty:
-            st.markdown("---")
             st.subheader(f"🔄 Revisão de Documentos (Importação)")
-            st.info("Revise os dados abaixo antes de salvar na nuvem.")
+            st.info("Revise os dados abaixo. Eles serão adicionados ao seu painel após o salvamento, ignorando duplicatas.")
             
             df_preview = st.session_state['df_import_preview'].copy()
             
@@ -451,7 +518,7 @@ elif menu == "Gestão de Docs":
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Vencimento": st.column_config.DateColumn("Vencimento", format="DD/MM/YYYY"),
+                    "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
                     "Data_Recebimento": st.column_config.DateColumn("Recebimento", format="DD/MM/YYYY"),
                 },
                 key="import_preview_editor"
@@ -485,20 +552,7 @@ elif menu == "Gestão de Docs":
                 st.rerun()
             st.markdown("---")
 
-        with st.expander("➕ Novo Documento (Manual)"):
-            with st.form("new_doc", clear_on_submit=True):
-                n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.text_input("Documento"); n_c = st.text_input("CNPJ")
-                if st.form_submit_button("ADICIONAR"):
-                    if n_d:
-                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
-                        df_prazos = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
-                        df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
-                        salvar_alteracoes_completo(df_prazos, df_checklist)
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                        st.rerun()
-
-    with col_d:
-        if doc_ativo_id:
+        elif doc_ativo_id: # --- BLOCO DE EDIÇÃO INDIVIDUAL ---
             indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
             
             if not indices.empty:
@@ -553,10 +607,10 @@ elif menu == "Gestão de Docs":
                 mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
                 df_t = df_checklist[mask].copy().reset_index(drop=True)
                 
-                # ADICIONAR TAREFA
+                c_add, c_btn = st.columns([3, 1])
+                # FORMULÁRIO DE ADICIONAR TAREFA
                 with st.form(key=f"add_task_{doc_ativo_id}", clear_on_submit=True):
-                    c_add, c_btn = st.columns([3, 1])
-                    new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed")
+                    new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
                     if c_btn.form_submit_button("ADICIONAR"):
                         if new_t:
                             line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
@@ -598,7 +652,59 @@ elif menu == "Gestão de Docs":
             else:
                 st.warning("Documento não encontrado.")
                 if st.button("Voltar"): st.session_state['doc_focado_id'] = None; st.rerun()
-        else: st.info("👈 Selecione um documento na lista.")
+        # Fim do Bloco de Edição Individual
+        
+        # --- BLOC DE PRÉ-VISUALIZAÇÃO ---
+        elif 'df_import_preview' in st.session_state and not st.session_state['df_import_preview'].empty:
+            st.subheader(f"🔄 Revisão de Documentos (Importação)")
+            st.info("Revise os dados abaixo. Eles serão adicionados ao seu painel após o salvamento, ignorando duplicatas.")
+            
+            df_preview = st.session_state['df_import_preview'].copy()
+            
+            df_edited = st.data_editor(
+                df_preview[['Unidade', 'Setor', 'Documento', 'CNPJ', 'Vencimento', 'Data_Recebimento', 'Status']],
+                num_rows="dynamic",
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
+                    "Data_Recebimento": st.column_config.DateColumn("Recebimento", format="DD/MM/YYYY"),
+                },
+                key="import_preview_editor"
+            )
+            
+            st.markdown("---")
+            c_i1, c_i2 = st.columns(2)
+            if c_i1.button("✅ Salvar Todos (Importar)", type="primary", use_container_width=True):
+                
+                df_edited['Progresso'] = 0
+                df_edited['Concluido'] = 'False'
+                
+                df_edited['ID_UNICO'] = df_edited['Unidade'].astype(str) + " - " + df_edited['Documento'].astype(str)
+                df_p_current = df_prazos.copy()
+                ids_atuais = df_p_current['ID_UNICO'].tolist()
+                
+                df_to_add = df_edited[~df_edited['ID_UNICO'].isin(ids_atuais)].copy()
+                
+                if not df_to_add.empty:
+                    df_p_current = pd.concat([df_p_current, df_to_add], ignore_index=True)
+                    
+                    if salvar_alteracoes_completo(df_p_current, df_checklist):
+                        del st.session_state['df_import_preview']
+                        st.session_state['dados_cache'] = carregar_tudo()
+                        st.rerun()
+                else:
+                     st.warning("Nenhum documento novo para adicionar.")
+                     
+            if c_i2.button("❌ Descartar", use_container_width=True):
+                del st.session_state['df_import_preview']
+                st.rerun()
+            st.markdown("---")
+        
+        # --- BLOCO DE INFORMAÇÃO BÁSICA ---
+        else:
+            st.info("👈 Selecione um documento na lista ou use a Importação em Massa acima.")
+
 
 elif menu == "Vistoria Mobile":
     st.title("Auditoria Mobile")
