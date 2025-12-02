@@ -13,9 +13,16 @@ import requests
 import streamlit.components.v1 as components
 import pytz
 import io
-import plotly.express as px
-import plotly.graph_objects as go
-# A importação Plotly está segura agora
+# --- NOVO IMPORT ---
+from streamlit_option_menu import option_menu 
+
+# Tenta importar Plotly
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
+    TEM_PLOTLY = True
+except ImportError:
+    TEM_PLOTLY = False
 
 # --- 1. CONFIGURAÇÃO GERAL ---
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
@@ -33,7 +40,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES AUXILIARES ---
+# --- FUNÇÕES ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -60,6 +67,12 @@ st.markdown("""
         border: none; color: white;
     }
     .stProgress > div > div > div > div { background-color: #00c853; }
+    [data-testid="stDataFrame"] { width: 100%; }
+    
+    /* Badge de Status */
+    .status-badge {
+        padding: 5px 10px; border-radius: 15px; font-weight: bold; color: white; display: inline-block; margin-bottom: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -114,16 +127,18 @@ def carregar_tudo():
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
             
+            # Blindagem de Tipos
             for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ']:
                 df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
-                
+            
             for c_date in ['Vencimento', 'Data_Recebimento']:
                 df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
             
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
             df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
-        if df_check.empty: df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+        if df_check.empty: 
+            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
         else:
             df_check['Documento_Ref'] = df_check['Documento_Ref'].astype(str)
             df_check = df_check[df_check['Tarefa'] != ""]
@@ -174,20 +189,15 @@ def salvar_vistoria_db(lista_itens):
         header = ws.row_values(1)
         if "Foto_Link" not in header: ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data", "Foto_Link"])
         hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y")
-        progresso = st.progress(0, text="Salvando fotos...")
+        prog = st.progress(0, "Salvando...")
         for i, item in enumerate(lista_itens):
-            link_foto = ""
+            link = ""
             if item.get('Foto_Binaria'):
-                nome_arq = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
-                
-                # --- FIX: REPOSICIONA CURSOR ---
-                item['Foto_Binaria'].seek(0)
-                
-                link_foto = upload_foto_drive(item['Foto_Binaria'], nome_arq)
-            
-            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link_foto])
-            progresso.progress((i + 1) / len(lista_itens))
-        progresso.empty()
+                nome = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
+                link = upload_foto_drive(item['Foto_Binaria'], nome)
+            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link])
+            prog.progress((i+1)/len(lista_itens))
+        prog.empty()
     except Exception as e: st.error(f"Erro: {e}")
 
 def carregar_historico_vistorias():
@@ -206,8 +216,8 @@ def limpar_txt(t):
     return t.encode('latin-1', 'replace').decode('latin-1')
 def baixar_imagem_url(url):
     try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200: return io.BytesIO(response.content)
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200: return io.BytesIO(resp.content)
     except: pass
     return None
 def gerar_pdf(vistorias):
@@ -239,7 +249,7 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     
-    # MENU PRINCIPAL
+    # MENU PRINCIPAL (Corrigido para evitar NameError)
     menu = option_menu(
         menu_title=None,
         options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"],
@@ -255,7 +265,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v28.1 - Photo Fix")
+    st.caption("v28.0 - Final Fix")
 
 # --- ROBÔ ---
 try:
@@ -391,7 +401,6 @@ elif menu == "Gestão de Docs":
                 doc_nome = df_prazos.at[idx, 'Documento']
                 
                 st.subheader(f"📝 {doc_nome}")
-                # ATUALIZADO: Inclui Setor e CNPJ no cabeçalho
                 st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
                 
                 c_del, _ = st.columns([1, 4])
@@ -415,7 +424,7 @@ elif menu == "Gestão de Docs":
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
                     c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; color: white;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
                     
-                    # EDIÇÃO DE SETOR
+                    # Edição de Setor
                     novo_setor = st.text_input("Editar Setor", value=df_prazos.at[idx, 'Setor'], key=f"edit_sector_{doc_ativo_id}")
                     
                     try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
@@ -426,7 +435,7 @@ elif menu == "Gestão de Docs":
                     except: d_venc = date.today()
                     df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key=f"dt_venc_{doc_ativo_id}")
                     
-                    # ATUALIZA A MEMÓRIA COM O NOVO SETOR
+                    # ATUALIZA MEMORIA
                     df_prazos.at[idx, 'Status'] = novo_risco
                     df_prazos.at[idx, 'Setor'] = novo_setor
                     
@@ -437,8 +446,7 @@ elif menu == "Gestão de Docs":
                 df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
                 df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
                 mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
-                df_t = df_checklist[mask].copy()
-                df_t = df_t.reset_index(drop=True)
+                df_t = df_checklist[mask].copy().reset_index(drop=True) # RESET INDEX AQUI
                 
                 c_add, c_btn = st.columns([3, 1])
                 new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
@@ -464,7 +472,10 @@ elif menu == "Gestão de Docs":
                     )
                     
                     tot = len(edited); done = edited['Feito'].sum(); new_p = int((done/tot)*100) if tot > 0 else 0
-                    if new_p != prog_atual: df_prazos.at[idx, 'Progresso'] = new_p; st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                    
+                    if new_p != prog_atual:
+                        df_prazos.at[idx, 'Progresso'] = new_p
+                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
                     
                     if not edited.equals(df_t):
                         df_checklist = df_checklist[~mask]
