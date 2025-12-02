@@ -13,6 +13,7 @@ import requests
 import streamlit.components.v1 as components
 import pytz
 import io
+from streamlit_option_menu import option_menu 
 
 # Tenta importar Plotly
 try:
@@ -38,7 +39,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES CORE ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -50,25 +51,6 @@ img_loading = get_img_as_base64("loading.gif")
 def safe_prog(val):
     try: return max(0, min(100, int(float(val))))
     except: return 0
-
-st.markdown("""
-<style>
-    .stApp { background-color: #0e1117; color: #e0e0e0; }
-    div[data-testid="metric-container"] {
-        background-color: #1f2937; border: 1px solid #374151;
-        padding: 15px; border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-    }
-    .stButton>button {
-        border-radius: 8px; font-weight: 600; text-transform: uppercase;
-        background-image: linear-gradient(to right, #2563eb, #1d4ed8);
-        border: none; color: white;
-    }
-    .stProgress > div > div > div > div { background-color: #00c853; }
-    /* Estilo de tabela mais limpo */
-    [data-testid="stDataFrame"] { width: 100%; border-radius: 8px; }
-</style>
-""", unsafe_allow_html=True)
 
 def get_creds():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -275,7 +257,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v30.0 - Mobile Final")
+    st.caption("v31.0 - Estabilidade Final")
 
 # --- ROBÔ ---
 try:
@@ -290,21 +272,13 @@ try:
             try:
                 dias = (row['Vencimento'] - hoje).days
                 prog = safe_prog(row['Progresso'])
-                if row['Status'] in ["ALTO", "CRÍTICO"] and prog < 100:
-                    status_alerta = f"{row['Status']} (Manual)"
-                    lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
-                elif dias <= 5 and prog < 100 and row['Status'] not in ["CRÍTICO", "ALTO"]:
-                    status_alerta = f"PRAZO PRÓXIMO"
-                    lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
+                if dias < 0 and prog < 100: lista_alerta.append(f"⛔ ATRASADO: {row['Documento']}")
+                elif dias <= 5 and prog < 100: lista_alerta.append(f"⚠️ VENCE EM {dias} DIAS: {row['Documento']}")
             except: pass
-        
         if lista_alerta:
-            msg_push = "Lista de Pendências:\n\n"
-            for p in lista_alerta[:5]:
-                msg_push += f"- {p['unidade']} ({p['setor']}) - {p['doc']} - Risco: {p['status']}\n"
-            if len(lista_alerta) > 5: msg_push += f"...e mais {len(lista_alerta) - 5} itens."
-            
-            enviar_notificacao_push(f"🚨 {len(lista_alerta)} ALERTAS ATIVOS", msg_push, "high")
+            msg = "\n".join(lista_alerta[:5])
+            if len(lista_alerta) > 5: msg += "\n..."
+            enviar_notificacao_push(f"🚨 ALERTAS", msg, "high")
             st.session_state['ultima_notificacao'] = agora
             st.toast("🤖 Alertas enviados!")
 except: pass
@@ -316,12 +290,14 @@ if menu == "Painel Geral":
     if 'dados_cache' in st.session_state: df_p = st.session_state['dados_cache'][0]
     else: df_p, _ = carregar_tudo()
     
-    # Indicadores
+    if df_p.empty:
+        st.warning("Ainda não há documentos cadastrados. Adicione na aba 'Gestão de Docs'.")
+        st.stop()
+
     n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
     
-    # LAYOUT MOBILE: KPIs em 4 colunas em telas grandes, empilhados em pequenas
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
@@ -330,46 +306,43 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # LAYOUT VERTICAL
+    # LAYOUT MOBILE: Tabela e Gráfico Empilhados
     
-    # 1. VISUAL GERAL
-    with st.container(border=True):
-        col_list, col_graf = st.columns([1.5, 1])
+    # 1. TABELA DE ALERTA
+    f_atual = st.session_state['filtro_dash']
+    st.subheader(f"Lista de Processos: {f_atual}")
+    df_show = df_p.copy()
+    if f_atual != "TODOS":
+        df_show = df_show[df_show['Status'] == f_atual]
         
-        with col_list:
-            f_atual = st.session_state['filtro_dash']
-            st.subheader(f"Lista de Processos: {f_atual}")
-            df_show = df_p.copy()
-            if f_atual != "TODOS":
-                df_show = df_show[df_show['Status'] == f_atual]
-                
-            if not df_show.empty:
-                st.dataframe(
-                    df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Status']], 
-                    use_container_width=True, 
-                    hide_index=True,
-                    column_config={
-                        "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
-                        "Status": st.column_config.TextColumn("Risco", width="small")
-                    }
-                )
-            else:
-                st.info("Nenhum item neste status.")
+    if not df_show.empty:
+        st.dataframe(
+            df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
+                "Progresso": st.column_config.ProgressColumn("Prog", format="%d%%"),
+                "Status": st.column_config.TextColumn("Risco", width="small")
+            }
+        )
+    else:
+        st.info("Nenhum item neste status.")
 
-        with col_graf:
-            st.subheader("Panorama")
-            if not df_p.empty and TEM_PLOTLY:
-                status_counts = df_p['Status'].value_counts()
-                fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
-                    color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
-                fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
-                st.plotly_chart(fig, use_container_width=True)
-                
-                media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
-                st.metric("Progresso Geral", f"{media}%")
-                st.progress(media)
-        
     st.markdown("---")
+    
+    # 2. GRÁFICO
+    st.subheader("Panorama")
+    if not df_p.empty and TEM_PLOTLY:
+        status_counts = df_p['Status'].value_counts()
+        fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
+            color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
+        fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
+        st.plotly_chart(fig, use_container_width=True)
+        
+        media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
+        st.metric("Progresso Geral", f"{media}%")
+        st.progress(media)
 
 elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
@@ -445,6 +418,7 @@ elif menu == "Gestão de Docs":
                     opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
                     if st_curr not in opcoes: st_curr = "NORMAL"
 
+                    # CORRIGIDO: CHAVE ÚNICA E INICIALIZAÇÃO CORRETA
                     novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
                     
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
