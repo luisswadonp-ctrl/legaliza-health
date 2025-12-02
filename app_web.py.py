@@ -194,4 +194,17 @@ if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notifi
 # Sidebar
 with st.sidebar:
     if img_loading:
-        st.markdown(f'<div style="text-
+        st.markdown(f'<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px; margin-bottom:15px;"></div>', unsafe_allow_html=True)
+    else:
+        st.image("https://cdn-icons-png.flaticon.com/512/2966/2966327.png", width=80)
+    
+    st.markdown("### LegalizaHealth Pro")
+    st.caption("v4.2 - Ajuste de Datas e Push")
+    menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Prazos", "📸 Nova Vistoria", "📂 Relatórios"])
+    st.markdown("---")
+
+# --- ROBÔ DE RESUMO (EVITA CASCATA) ---
+try:
+    agora = datetime.now()
+    # Verifica se já passou 60 minutos desde o último resumo
+    diferenca_tempo = (agora -
