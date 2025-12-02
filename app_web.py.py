@@ -13,8 +13,6 @@ import requests
 import streamlit.components.v1 as components
 import pytz
 import io
-# --- NOVO IMPORT ---
-from streamlit_option_menu import option_menu 
 
 # Tenta importar Plotly
 try:
@@ -68,11 +66,6 @@ st.markdown("""
     }
     .stProgress > div > div > div > div { background-color: #00c853; }
     [data-testid="stDataFrame"] { width: 100%; }
-    
-    /* Badge de Status */
-    .status-badge {
-        padding: 5px 10px; border-radius: 15px; font-weight: bold; color: white; display: inline-block; margin-bottom: 10px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -92,11 +85,17 @@ def upload_foto_drive(foto_binaria, nome_arquivo):
         creds = get_creds()
         service = build('drive', 'v3', credentials=creds)
         file_metadata = {'name': nome_arquivo, 'parents': [ID_PASTA_DRIVE]}
+        
+        # --- FIX: Reposiciona o cursor ---
+        if hasattr(foto_binaria, 'seek'):
+            foto_binaria.seek(0)
+            
         media = MediaIoBaseUpload(foto_binaria, mimetype='image/jpeg')
         file = service.files().create(body=file_metadata, media_body=media, fields='id, webContentLink').execute()
         return file.get('webContentLink', '')
     except Exception as e:
-        st.error(f"Erro Drive: {e}")
+        # Mostra o erro 403, mas o código segue
+        st.error(f"ERRO DRIVE: Falha no Upload! Verifique sua Quota do Google Drive. Detalhes: {e}")
         return ""
 
 def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
@@ -127,7 +126,6 @@ def carregar_tudo():
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
             
-            # Blindagem de Tipos
             for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ']:
                 df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
             
@@ -137,8 +135,7 @@ def carregar_tudo():
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
             df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
-        if df_check.empty: 
-            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+        if df_check.empty: df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
         else:
             df_check['Documento_Ref'] = df_check['Documento_Ref'].astype(str)
             df_check = df_check[df_check['Tarefa'] != ""]
@@ -181,24 +178,28 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         st.error(f"Erro ao salvar: {e}")
         return False
 
-def salvar_vistoria_db(lista_itens):
+# Adicionei a função para salvar o histórico editado
+def salvar_historico_editado(df_editado, data_selecionada):
     try:
         sh = conectar_gsheets()
-        try: ws = sh.worksheet("Vistorias")
-        except: ws = sh.add_worksheet("Vistorias", 1000, 10)
-        header = ws.row_values(1)
-        if "Foto_Link" not in header: ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data", "Foto_Link"])
-        hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y")
-        prog = st.progress(0, "Salvando...")
-        for i, item in enumerate(lista_itens):
-            link = ""
-            if item.get('Foto_Binaria'):
-                nome = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
-                link = upload_foto_drive(item['Foto_Binaria'], nome)
-            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link])
-            prog.progress((i+1)/len(lista_itens))
-        prog.empty()
-    except Exception as e: st.error(f"Erro: {e}")
+        ws = sh.worksheet("Vistorias")
+        todos_dados = pd.DataFrame(ws.get_all_records())
+        
+        # 1. Remove os dados antigos da data selecionada (para deletar ou editar)
+        todos_dados = todos_dados[todos_dados['Data'] != data_selecionada]
+        
+        # 2. Adiciona os novos dados editados
+        df_editado['Data'] = data_selecionada
+        todos_dados = pd.concat([todos_dados, df_editado], ignore_index=True)
+        
+        # 3. Salva tudo de volta
+        ws.clear()
+        ws.update([todos_dados.columns.values.tolist()] + todos_dados.values.tolist())
+        st.toast("Histórico Atualizado!")
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar histórico: {e}")
+        return False
 
 def carregar_historico_vistorias():
     try:
@@ -216,8 +217,8 @@ def limpar_txt(t):
     return t.encode('latin-1', 'replace').decode('latin-1')
 def baixar_imagem_url(url):
     try:
-        resp = requests.get(url, timeout=10)
-        if resp.status_code == 200: return io.BytesIO(resp.content)
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200: return io.BytesIO(response.content)
     except: pass
     return None
 def gerar_pdf(vistorias):
@@ -249,7 +250,7 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     
-    # MENU PRINCIPAL (Corrigido para evitar NameError)
+    # MENU PRINCIPAL
     menu = option_menu(
         menu_title=None,
         options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"],
@@ -265,7 +266,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v28.0 - Final Fix")
+    st.caption("v28.1 - Final Photo Fix")
 
 # --- ROBÔ ---
 try:
@@ -419,6 +420,7 @@ elif menu == "Gestão de Docs":
                     opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
                     if st_curr not in opcoes: st_curr = "NORMAL"
 
+                    # CORRIGIDO: CHAVE ÚNICA E INICIALIZAÇÃO CORRETA
                     novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
                     
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
@@ -446,7 +448,7 @@ elif menu == "Gestão de Docs":
                 df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
                 df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
                 mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
-                df_t = df_checklist[mask].copy().reset_index(drop=True) # RESET INDEX AQUI
+                df_t = df_checklist[mask].copy().reset_index(drop=True)
                 
                 c_add, c_btn = st.columns([3, 1])
                 new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
@@ -502,7 +504,7 @@ elif menu == "Vistoria Mobile":
         item = c2.text_input("Item")
         sit = c2.radio("Situação", ["❌ Irregular", "✅ Conforme"], horizontal=True)
         grav = c2.select_slider("Risco", ["Baixo", "Médio", "Alto", "CRÍTICO"])
-        obs = c2.text_area("Obs")
+        obs = st.text_area("Obs")
         if st.button("➕ REGISTRAR", type="primary"):
             st.session_state['vistorias'].append({"Setor": setor, "Item": item, "Situação": sit, "Gravidade": grav, "Obs": obs, "Foto_Binaria": foto})
             st.success("Registrado!")
