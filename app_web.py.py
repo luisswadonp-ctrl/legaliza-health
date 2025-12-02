@@ -15,6 +15,8 @@ import pytz
 import io
 from streamlit_option_menu import option_menu 
 import chardet # Para detectar encoding de CSV
+import openpyxl # Necessário para ler xlsx
+
 # Tenta importar Plotly
 try:
     import plotly.express as px
@@ -86,12 +88,12 @@ def upload_foto_drive(foto_binaria, nome_arquivo):
         creds = get_creds()
         service = build('drive', 'v3', credentials=creds)
         file_metadata = {'name': nome_arquivo, 'parents': [ID_PASTA_DRIVE]}
-        # AQUI VOCÊ TINHA O ERRO 403 - Desativando o upload real para evitar o crash
-        # media = MediaIoBaseUpload(foto_binaria, mimetype='image/jpeg')
-        # file = service.files().create(body=file_metadata, media_body=media, fields='id, webContentLink').execute()
-        return "https://drive.google.com/d/ERRO_QUOTA"
+        media = MediaIoBaseUpload(foto_binaria, mimetype='image/jpeg')
+        file = service.files().create(body=file_metadata, media_body=media, fields='id, webContentLink').execute()
+        return file.get('webContentLink', '')
     except Exception as e:
-        return f"ERRO_UPLOAD_{str(e)[:10]}"
+        st.error(f"Erro Drive: {e}")
+        return ""
 
 def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
     try:
@@ -101,28 +103,29 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
-# --- NOVA FUNÇÃO DE PROCESSAMENTO DE DADOS ---
+# --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS ---
 def processar_dados_importados(df_importado_raw, tipo_doc_base):
     """Mapeia o DataFrame importado (CSV/Excel) para o formato do df_prazos."""
     df = df_importado_raw.copy()
     
-    # Normalização dos nomes das colunas (para UPPER e sem caracteres especiais)
+    # Normalização dos nomes das colunas
     df.columns = [str(c).strip().replace('.', '').upper() for c in df.columns]
     
-    # Tenta encontrar a melhor coluna para cada campo
+    # Mapeamento de Colunas (Candidatos)
     col_map = {
-        'Unidade': ['UNIDADE', 'NOME DA UNIDADE', 'UNIDADEMANTENEDORA'],
-        'Setor': ['SETOR', 'SETOR FISCALIZADO'],
-        'Documento_Principal': ['TIPO DE DOCUMENTO', 'NOME DO DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO'],
+        'Unidade': ['NOME DA UNIDADE', 'UNIDADE'],
         'CNPJ': ['CNPJ'],
+        'Setor': ['SETOR FISCALIZADO', 'SETOR'],
+        'Documento_Principal': ['TIPO DE DOCUMENTO', 'NOME DO DOCUMENTO', 'TAXA', 'MOTIVO DA FISCALIZAÇÃO'],
         'Vencimento': ['DATA LIMITE DE ATENDIMENTO', 'VENCIMENTO', 'SLA ESPERADO'],
-        'Data_Recebimento': ['DATA DO DOCUMENTO', 'DATA INÍCIO', 'DATA ENVIO PGTO'],
+        'Data_Recebimento': ['DATA DO DOCUMENTO/RECEBIDO PELA UNIDADE', 'DATA INÍCIO', 'DATA ENVIO PGTO'],
+        'Status_Origem': ['STATUS DO PROCESSO', 'STATUS'],
     }
     
     df_result = pd.DataFrame()
     hoje = date.today()
-
-    # Mapeamento de Colunas
+    
+    # Itera sobre o mapa para encontrar a melhor coluna
     for col_final, col_candidatas in col_map.items():
         col_encontrada = next((c for c in col_candidatas if c in df.columns), None)
         
@@ -134,33 +137,38 @@ def processar_dados_importados(df_importado_raw, tipo_doc_base):
         else:
             df_result[col_final] = val
             
-    # Combina Nome do Documento
-    if 'Documento_Principal' in df_result.columns:
-        # Se for um tipo específico como 'COMUNIQUE-SE', usa esse nome
-        df_result['Documento'] = df_result['Documento_Principal'].apply(lambda x: f"{tipo_doc_base} - {x}" if x and tipo_doc_base != "OUTROS" else x)
-        df_result['Documento'] = df_result['Documento'].apply(lambda x: x if x else tipo_doc_base)
-    else:
-        df_result['Documento'] = tipo_doc_base
+    # Combina Nome do Documento Principal
+    doc_base = df_result.get('Documento_Principal', pd.Series([''] * len(df_result)))
+    doc_detalhe = df_result.get('MOTIVO DA FISCALIZAÇÃO', pd.Series([''] * len(df_result)))
+
+    df_result['Documento'] = doc_base.str.cat(doc_detalhe, sep=' - ', na_rep='').str.strip(' - ')
+    df_result['Documento'] = df_result['Documento'].apply(lambda x: x if x else tipo_doc_base)
 
     
     # Mapeamento de Status
     status_map = {'CONCLUÍDO': 'NORMAL', 'QUITADO': 'NORMAL', 'EM ANDAMENTO': 'ALTO', 'PENDENTE': 'CRÍTICO', 'VENCIDO': 'CRÍTICO', 'EM PGTO': 'ALTO'}
-    df_result['Status'] = df_result.get('Status', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
+    df_result['Status'] = df_result.get('Status_Origem', pd.Series(['NORMAL'] * len(df_result))).astype(str).str.upper().str.strip().replace(status_map)
     
-    # Finalização
+    # Preenchimento de campos vazios com info amigável (Conforme solicitado)
+    df_result['Unidade'] = df_result['Unidade'].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
+    df_result['Setor'] = df_result['Setor'].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
+    df_result['CNPJ'] = df_result['CNPJ'].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
+    
+    # Limpa linhas sem Unidade ou Documento (mínimo necessário)
+    df_result = df_result[df_result['Unidade'] != 'Não Informado'].reset_index(drop=True)
+    
+    # Campos padrão
     df_result['Progresso'] = 0
     df_result['Concluido'] = 'False'
     
-    # Limpa linhas sem Documento (mínimo necessário)
-    df_result = df_result[df_result['Documento'] != 'Não Definido'].reset_index(drop=True)
-    
-    # Preenche vazios com info amigável
-    for col in ['Unidade', 'Setor', 'CNPJ']:
-        if col in df_result.columns:
-            df_result[col] = df_result[col].replace({'': 'Não Informado', 'NAN': 'Não Informado', 'NA': 'Não Informado'})
-
+    # Seleciona as colunas finais
     colunas_finais = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
     
+    # Finaliza preenchendo colunas que faltam no resultado final (para não dar erro de coluna)
+    for col in colunas_finais:
+        if col not in df_result.columns:
+            df_result[col] = '' # Deve ser tratado no load, mas garante
+
     return df_result[colunas_finais].copy()
 
 # --- FUNÇÕES DE CONEXÃO E SALVAMENTO ---
@@ -258,6 +266,22 @@ def salvar_vistoria_db(lista_itens):
         st.toast("✅ Vistoria Registrada!", icon="☁️")
     except Exception as e: st.error(f"Erro: {e}")
 
+def salvar_historico_editado(df_editado, data_selecionada):
+    try:
+        sh = conectar_gsheets()
+        ws = sh.worksheet("Vistorias")
+        todos_dados = pd.DataFrame(ws.get_all_records())
+        todos_dados = todos_dados[todos_dados['Data'] != data_selecionada]
+        df_editado['Data'] = data_selecionada
+        todos_dados = pd.concat([todos_dados, df_editado], ignore_index=True)
+        ws.clear()
+        ws.update([todos_dados.columns.values.tolist()] + todos_dados.values.tolist())
+        st.toast("Histórico Atualizado!")
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar histórico: {e}")
+        return False
+
 def carregar_historico_vistorias():
     try:
         sh = conectar_gsheets()
@@ -308,7 +332,6 @@ if 'df_import_preview' not in st.session_state: st.session_state['df_import_prev
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     
-    # MENU PRINCIPAL
     menu = option_menu(
         menu_title=None,
         options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"],
@@ -324,7 +347,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v33.0 - Estabilidade Total")
+    st.caption("v34.0 - Import Final")
 
 # --- ROBÔ ---
 try:
@@ -372,6 +395,8 @@ if menu == "Painel Geral":
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
     
+    # LAYOUT MOBILE: KPIs empilhados, Tabela e Gráfico empilhados.
+    
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
@@ -380,7 +405,7 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # 1. TABELA DE ALERTA (Filtra de acordo com o clique)
+    # 1. TABELA DE ALERTA
     f_atual = st.session_state['filtro_dash']
     st.subheader(f"Lista de Processos: {f_atual}")
     df_show = df_p.copy()
@@ -394,7 +419,7 @@ if menu == "Painel Geral":
             hide_index=True,
             column_config={
                 "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
-                "Progresso": st.column_config.ProgressColumn("Prog", format="%d%%"),
+                "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"),
                 "Status": st.column_config.TextColumn("Risco", width="small")
             }
         )
@@ -413,7 +438,7 @@ if menu == "Painel Geral":
         st.plotly_chart(fig, use_container_width=True)
         
         media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
-        st.metric("Progresso Geral", f"{media}%")
+        st.metric("Progressão Geral", f"{media}%")
         st.progress(media)
 
 elif menu == "Gestão de Docs":
@@ -452,19 +477,17 @@ elif menu == "Gestão de Docs":
         
         st.markdown("---")
         
-        # --- NOVO BLOCO DE IMPORTAÇÃO ---
-        with st.expander("⬆️ Importar Documentos (CSV/Excel)"):
+        # --- BLOCO DE IMPORTAÇÃO ---
+        with st.expander("⬆️ Importação em Massa"):
             with st.form("import_docs", clear_on_submit=True):
-                uploaded_file = st.file_uploader("Selecione o arquivo (CSV/Excel) para importação", type=['csv', 'xlsx'])
-                # Opções de tipo
-                tipo_import = st.selectbox("Documento Principal (Para o campo 'Documento'):", 
+                uploaded_file = st.file_uploader("Selecione o arquivo (CSV/Excel)", type=['csv', 'xlsx'])
+                tipo_import = st.selectbox("Documento Principal:", 
                                             ["COMUNIQUE-SE/NOTIFICAÇÃO", "PROCESSO EM ANDAMENTO", "TAXA", "OUTROS"], 
                                             key="tipo_import")
                 
                 if st.form_submit_button("IMPORTAR E VALIDAR", type="secondary"):
                     if uploaded_file is not None:
                         try:
-                            # Tenta ler com diferentes delimitadores para maior robustez
                             if uploaded_file.name.endswith('.csv'):
                                 try: df_novo_raw = pd.read_csv(uploaded_file, encoding='utf-8', sep=',')
                                 except: uploaded_file.seek(0); df_novo_raw = pd.read_csv(uploaded_file, encoding='latin1', sep=';')
@@ -477,37 +500,20 @@ elif menu == "Gestão de Docs":
                             
                             if not df_novos_docs.empty:
                                 st.session_state['df_import_preview'] = df_novos_docs
-                                st.session_state['tipo_import_ativo'] = tipo_import
                                 st.success(f"Dados importados ({len(df_novos_docs)} itens) para revisão! Role para baixo na coluna direita.")
                             else:
-                                st.error("Não foi possível extrair dados válidos. Verifique a estrutura das colunas e a coluna 'Unidade'.")
+                                st.error("Não foi possível extrair dados válidos. Verifique a coluna 'Unidade'.")
 
                         except Exception as e:
                             st.error(f"Erro ao ler ou processar o arquivo: {e}")
                             st.session_state['df_import_preview'] = pd.DataFrame() 
                     else:
                         st.warning("Por favor, carregue um arquivo primeiro.")
-        
-        # --- FIM NOVO BLOCO DE IMPORTAÇÃO ---
 
-        with st.expander("➕ Novo Documento (Manual)"):
-            with st.form("new_doc", clear_on_submit=True):
-                n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.text_input("Documento"); n_c = st.text_input("CNPJ")
-                if st.form_submit_button("ADICIONAR"):
-                    if n_d:
-                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
-                        df_prazos = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
-                        df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
-                        salvar_alteracoes_completo(df_prazos, df_checklist)
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                        st.rerun()
-
-    with col_d:
-        # --- BLOCO DE PRÉ-VISUALIZAÇÃO ---
+        # --- BLOCO DE PRÉ-VISUALIZAÇÃO (Import) ---
         if 'df_import_preview' in st.session_state and not st.session_state['df_import_preview'].empty:
-            st.subheader(f"🔄 Revisão de Documentos ({len(st.session_state['df_import_preview'])} Itens)")
-            st.info("Revise os dados abaixo. Eles serão adicionados ao seu painel após o salvamento, ignorando duplicatas.")
-            
+            st.markdown("---")
+            st.subheader(f"🔄 Revisão de Documentos (Importação)")
             df_preview = st.session_state['df_import_preview'].copy()
             
             df_edited = st.data_editor(
@@ -526,15 +532,13 @@ elif menu == "Gestão de Docs":
             c_i1, c_i2 = st.columns(2)
             if c_i1.button("✅ Salvar Todos (Importar)", type="primary", use_container_width=True):
                 
-                # Prepara para salvar
                 df_edited['Progresso'] = 0
                 df_edited['Concluido'] = 'False'
-                
                 df_edited['ID_UNICO'] = df_edited['Unidade'].astype(str) + " - " + df_edited['Documento'].astype(str)
+
                 df_p_current = df_prazos.copy()
                 ids_atuais = df_p_current['ID_UNICO'].tolist()
                 
-                # Filtra apenas o que é novo (anti-duplicata)
                 df_to_add = df_edited[~df_edited['ID_UNICO'].isin(ids_atuais)].copy()
                 
                 if not df_to_add.empty:
@@ -545,13 +549,27 @@ elif menu == "Gestão de Docs":
                         st.session_state['dados_cache'] = carregar_tudo()
                         st.rerun()
                 else:
-                     st.warning("Nenhum documento novo para adicionar. Verifique duplicatas.")
+                     st.warning("Nenhum documento novo para adicionar após a filtragem de duplicatas ou a lista está vazia.")
                      
             if c_i2.button("❌ Descartar", use_container_width=True):
                 del st.session_state['df_import_preview']
                 st.rerun()
+            st.markdown("---")
 
-        elif doc_ativo_id: # --- BLOCO DE EDIÇÃO INDIVIDUAL ---
+        with st.expander("➕ Novo Documento (Manual)"):
+            with st.form("new_doc", clear_on_submit=True):
+                n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.text_input("Documento"); n_c = st.text_input("CNPJ")
+                if st.form_submit_button("ADICIONAR"):
+                    if n_d:
+                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
+                        df_prazos = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
+                        df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
+                        salvar_alteracoes_completo(df_prazos, df_checklist)
+                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                        st.rerun()
+
+    with col_d:
+        if doc_ativo_id: # --- BLOCO DE EDIÇÃO INDIVIDUAL ---
             indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
             
             if not indices.empty:
@@ -607,8 +625,8 @@ elif menu == "Gestão de Docs":
                 df_t = df_checklist[mask].copy().reset_index(drop=True)
                 
                 c_add, c_btn = st.columns([3, 1])
-                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed")
-                if c_btn.button("ADICIONAR"):
+                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
+                if c_btn.button("ADICIONAR", key=f"btn_add_{doc_ativo_id}"):
                     if new_t:
                         line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
                         df_checklist = pd.concat([df_checklist, line], ignore_index=True)
