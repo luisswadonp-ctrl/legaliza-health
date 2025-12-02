@@ -13,14 +13,9 @@ import requests
 import streamlit.components.v1 as components
 import pytz
 import io
-
-# Tenta importar Plotly
-try:
-    import plotly.express as px
-    import plotly.graph_objects as go
-    TEM_PLOTLY = True
-except ImportError:
-    TEM_PLOTLY = False
+import plotly.express as px
+import plotly.graph_objects as go
+# A importação Plotly está segura agora
 
 # --- 1. CONFIGURAÇÃO GERAL ---
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
@@ -38,7 +33,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES AUXILIARES ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -51,24 +46,20 @@ def safe_prog(val):
     try: return max(0, min(100, int(float(val))))
     except: return 0
 
-# CSS (AGORA LIMPO - SEM FORÇAR COR DE FUNDO)
 st.markdown("""
 <style>
-    /* Remove padding excessivo */
-    .block-container { padding-top: 2rem; }
-    
-    /* Botões mais bonitos */
-    .stButton>button {
-        border-radius: 8px; font-weight: bold; text-transform: uppercase;
-        border: 1px solid #ccc;
+    .stApp { background-color: #0e1117; color: #e0e0e0; }
+    div[data-testid="metric-container"] {
+        background-color: #1f2937; border: 1px solid #374151;
+        padding: 15px; border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
-    
-    /* Força ocultação de índice em todas as tabelas (0, 1, 2...) */
-    [data-testid="stDataFrame"] th:first-child { display: none; }
-    [data-testid="stDataFrame"] td:first-child { display: none; }
-    
-    /* Ajuste de largura total */
-    [data-testid="stDataFrame"] { width: 100%; }
+    .stButton>button {
+        border-radius: 8px; font-weight: 600; text-transform: uppercase;
+        background-image: linear-gradient(to right, #2563eb, #1d4ed8);
+        border: none; color: white;
+    }
+    .stProgress > div > div > div > div { background-color: #00c853; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -122,15 +113,17 @@ def carregar_tudo():
             
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
+            
+            for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ']:
+                df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
+                
             for c_date in ['Vencimento', 'Data_Recebimento']:
                 df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
-            df_prazos = df_prazos[df_prazos['Documento'] != ""]
             
-            # ID ÚNICO
+            df_prazos = df_prazos[df_prazos['Documento'] != ""]
             df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
-        if df_check.empty: 
-            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+        if df_check.empty: df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
         else:
             df_check['Documento_Ref'] = df_check['Documento_Ref'].astype(str)
             df_check = df_check[df_check['Tarefa'] != ""]
@@ -181,32 +174,21 @@ def salvar_vistoria_db(lista_itens):
         header = ws.row_values(1)
         if "Foto_Link" not in header: ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data", "Foto_Link"])
         hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y")
-        prog = st.progress(0, "Salvando...")
+        progresso = st.progress(0, text="Salvando fotos...")
         for i, item in enumerate(lista_itens):
-            link = ""
+            link_foto = ""
             if item.get('Foto_Binaria'):
-                nome = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
-                link = upload_foto_drive(item['Foto_Binaria'], nome)
-            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link])
-            prog.progress((i+1)/len(lista_itens))
-        prog.empty()
+                nome_arq = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
+                
+                # --- FIX: REPOSICIONA CURSOR ---
+                item['Foto_Binaria'].seek(0)
+                
+                link_foto = upload_foto_drive(item['Foto_Binaria'], nome_arq)
+            
+            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link_foto])
+            progresso.progress((i + 1) / len(lista_itens))
+        progresso.empty()
     except Exception as e: st.error(f"Erro: {e}")
-
-def salvar_historico_editado(df_editado, data_selecionada):
-    try:
-        sh = conectar_gsheets()
-        ws = sh.worksheet("Vistorias")
-        todos_dados = pd.DataFrame(ws.get_all_records())
-        todos_dados = todos_dados[todos_dados['Data'] != data_selecionada]
-        df_editado['Data'] = data_selecionada
-        todos_dados = pd.concat([todos_dados, df_editado], ignore_index=True)
-        ws.clear()
-        ws.update([todos_dados.columns.values.tolist()] + todos_dados.values.tolist())
-        st.toast("Histórico Atualizado!")
-        return True
-    except Exception as e:
-        st.error(f"Erro: {e}")
-        return False
 
 def carregar_historico_vistorias():
     try:
@@ -224,8 +206,8 @@ def limpar_txt(t):
     return t.encode('latin-1', 'replace').decode('latin-1')
 def baixar_imagem_url(url):
     try:
-        resp = requests.get(url, timeout=10)
-        if resp.status_code == 200: return io.BytesIO(resp.content)
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200: return io.BytesIO(response.content)
     except: pass
     return None
 def gerar_pdf(vistorias):
@@ -256,10 +238,24 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
-    st.markdown("### LegalizaHealth Pro")
-    st.caption("v30.0 - Visual Clean")
-    menu = st.radio("Menu", ["📊 Painel de Controle", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
+    
+    # MENU PRINCIPAL
+    menu = option_menu(
+        menu_title=None,
+        options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"],
+        icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"],
+        menu_icon="cast",
+        default_index=0,
+        styles={
+            "container": {"padding": "0!important", "background-color": "transparent"},
+            "icon": {"color": "#00c853", "font-size": "18px"},
+            "nav-link": {"font-size": "16px", "text-align": "left", "margin":"5px", "--hover-color": "#262730"},
+            "nav-link-selected": {"background-color": "#1f2937"},
+        }
+    )
+    
     st.markdown("---")
+    st.caption("v28.1 - Photo Fix")
 
 # --- ROBÔ ---
 try:
@@ -287,8 +283,8 @@ except: pass
 
 # --- TELAS ---
 
-if menu == "📊 Painel de Controle":
-    st.title("Painel de Controle")
+if menu == "Painel Geral":
+    st.title("Painel de Controle Estratégico")
     if 'dados_cache' in st.session_state: df_p = st.session_state['dados_cache'][0]
     else: df_p, _ = carregar_tudo()
     
@@ -314,6 +310,7 @@ if menu == "📊 Painel de Controle":
                 color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
             fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
             st.plotly_chart(fig, use_container_width=True)
+            
             media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
             st.metric("Progresso Geral", f"{media}%")
             st.progress(media)
@@ -326,7 +323,6 @@ if menu == "📊 Painel de Controle":
             df_show = df_show[df_show['Status'] == f_atual]
             
         if not df_show.empty:
-            # Tabela Limpa (Sem índice)
             st.dataframe(
                 df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Status']], 
                 use_container_width=True, 
@@ -339,7 +335,7 @@ if menu == "📊 Painel de Controle":
         else:
             st.info("Nenhum item neste status.")
 
-elif menu == "📅 Gestão de Documentos":
+elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
     if 'dados_cache' not in st.session_state: st.session_state['dados_cache'] = carregar_tudo()
     df_prazos, df_checklist = st.session_state['dados_cache']
@@ -389,12 +385,14 @@ elif menu == "📅 Gestão de Documentos":
     with col_d:
         if doc_ativo_id:
             indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
+            
             if not indices.empty:
                 idx = indices[0]
                 doc_nome = df_prazos.at[idx, 'Documento']
                 
                 st.subheader(f"📝 {doc_nome}")
-                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
+                # ATUALIZADO: Inclui Setor e CNPJ no cabeçalho
+                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
                 
                 c_del, _ = st.columns([1, 4])
                 if c_del.button("🗑️ Excluir"):
@@ -407,18 +405,19 @@ elif menu == "📅 Gestão de Documentos":
 
                 with st.container(border=True):
                     c1, c2, c3 = st.columns(3)
+                    
                     st_curr = df_prazos.at[idx, 'Status']
                     opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
                     if st_curr not in opcoes: st_curr = "NORMAL"
+
                     novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
                     
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
                     c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; color: white;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
                     
-                    # Edição de Setor
-                    novo_setor = st.text_input("Setor", value=df_prazos.at[idx, 'Setor'], key=f"setor_{doc_ativo_id}")
-                    df_prazos.at[idx, 'Setor'] = novo_setor
-
+                    # EDIÇÃO DE SETOR
+                    novo_setor = st.text_input("Editar Setor", value=df_prazos.at[idx, 'Setor'], key=f"edit_sector_{doc_ativo_id}")
+                    
                     try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
                     except: d_rec = date.today()
                     df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key=f"dt_rec_{doc_ativo_id}")
@@ -427,8 +426,10 @@ elif menu == "📅 Gestão de Documentos":
                     except: d_venc = date.today()
                     df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key=f"dt_venc_{doc_ativo_id}")
                     
+                    # ATUALIZA A MEMÓRIA COM O NOVO SETOR
                     df_prazos.at[idx, 'Status'] = novo_risco
-                    st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                    df_prazos.at[idx, 'Setor'] = novo_setor
+                    
                     prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
                     st.progress(prog_atual, text=f"Conclusão: {prog_atual}%")
 
@@ -453,19 +454,18 @@ elif menu == "📅 Gestão de Documentos":
                         df_t, 
                         num_rows="dynamic", 
                         use_container_width=True, 
-                        hide_index=True, # LIMPO
+                        hide_index=True,
                         column_config={
                             "Documento_Ref": None,
                             "Tarefa": st.column_config.TextColumn("Descrição", width="medium"),
                             "Feito": st.column_config.CheckboxColumn("OK", width="small")
-                        }, key=f"ed_{doc_ativo_id}"
+                        },
+                        key=f"ed_{doc_ativo_id}"
                     )
                     
-                    tot = len(edited); done = edited['Feito'].sum()
-                    new_p = int((done/tot)*100) if tot > 0 else 0
-                    if new_p != prog_atual:
-                        df_prazos.at[idx, 'Progresso'] = new_p
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                    tot = len(edited); done = edited['Feito'].sum(); new_p = int((done/tot)*100) if tot > 0 else 0
+                    if new_p != prog_atual: df_prazos.at[idx, 'Progresso'] = new_p; st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                    
                     if not edited.equals(df_t):
                         df_checklist = df_checklist[~mask]
                         edited['Documento_Ref'] = str(doc_ativo_id)
@@ -482,7 +482,7 @@ elif menu == "📅 Gestão de Documentos":
                 if st.button("Voltar"): st.session_state['doc_focado_id'] = None; st.rerun()
         else: st.info("👈 Selecione um documento na lista.")
 
-elif menu == "📸 Nova Vistoria":
+elif menu == "Vistoria Mobile":
     st.title("Auditoria Mobile")
     with st.container(border=True):
         c1, c2 = st.columns([1, 2])
@@ -496,7 +496,7 @@ elif menu == "📸 Nova Vistoria":
             st.session_state['vistorias'].append({"Setor": setor, "Item": item, "Situação": sit, "Gravidade": grav, "Obs": obs, "Foto_Binaria": foto})
             st.success("Registrado!")
 
-elif menu == "📂 Relatórios":
+elif menu == "Relatórios":
     st.title("Relatórios")
     tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
     with tab1:
@@ -512,15 +512,8 @@ elif menu == "📂 Relatórios":
             if not df_h.empty:
                 sel = st.selectbox("Data:", df_h['Data'].unique())
                 df_f = df_h[df_h['Data'] == sel]
-                # Tabela editável no histórico
-                st.info("Edite ou exclua linhas abaixo:")
-                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
-                
-                c_save, c_down = st.columns(2)
-                if c_save.button("💾 Salvar Correções"):
-                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
-                
-                if c_down.button(f"📥 Baixar PDF"):
+                st.dataframe(df_f, use_container_width=True, hide_index=True)
+                if st.button(f"📥 Baixar PDF"):
                     pdf = gerar_pdf(df_f.to_dict('records'))
                     st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
         except: st.error("Sem histórico.")
