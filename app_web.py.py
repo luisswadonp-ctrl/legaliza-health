@@ -20,7 +20,7 @@ st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wi
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_GERAL = 60 
 
-# --- ID DO DRIVE ---
+# --- SEU ID DO GOOGLE DRIVE JÁ CONFIGURADO ---
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ" 
 
 # --- AUTO-REFRESH ---
@@ -32,7 +32,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES VISUAIS ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -58,6 +58,8 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# --- 2. CONEXÃO E DADOS ---
 
 def get_creds():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -89,8 +91,6 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
                       headers={"Title": titulo.encode('utf-8'), "Priority": prioridade, "Tags": "hospital"})
         return True
     except: return False
-
-# --- FUNÇÕES DE DADOS ---
 
 def carregar_tudo():
     try:
@@ -159,14 +159,7 @@ def salvar_vistoria_db(lista_itens):
         progresso.empty()
     except Exception as e: st.error(f"Erro vistoria: {e}")
 
-def carregar_historico_vistorias():
-    try:
-        sh = conectar_gsheets()
-        ws = sh.worksheet("Vistorias")
-        return pd.DataFrame(ws.get_all_records())
-    except: return pd.DataFrame()
-
-# --- PDF GENERATOR (CORRIGIDO PARA EMOJIS E FOTOS) ---
+# --- PDF GENERATOR ---
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 12)
@@ -174,15 +167,11 @@ class PDF(FPDF):
         self.ln(5)
 
 def limpar_txt(t):
-    """Remove Emojis que quebram o PDF e converte para Latin-1"""
     if not isinstance(t, str): t = str(t)
-    # Substituições manuais para não perder o sentido
     t = t.replace("✅", "[OK]").replace("❌", "[X]").replace("🚨", "[!]").replace("⚠️", "[!]")
-    # Remove qualquer outro caractere estranho
     return t.encode('latin-1', 'replace').decode('latin-1')
 
 def baixar_imagem_url(url):
-    """Baixa imagem do Drive para memória"""
     try:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
@@ -193,44 +182,22 @@ def baixar_imagem_url(url):
 def gerar_pdf(vistorias):
     pdf = PDF()
     pdf.add_page()
-    
     for i, item in enumerate(vistorias):
         pdf.set_font("Arial", 'B', 12)
-        # Limpa o texto antes de escrever
-        nome_limpo = limpar_txt(item.get('Item', ''))
-        pdf.cell(0, 10, f"Item #{i+1}: {nome_limpo}", 0, 1)
-        
+        pdf.cell(0, 10, f"Item #{i+1}: {limpar_txt(item.get('Item', ''))}", 0, 1)
         pdf.set_font("Arial", size=10)
-        setor = limpar_txt(item.get('Setor', ''))
-        sit = limpar_txt(item.get('Situação', ''))
-        grav = limpar_txt(item.get('Gravidade', ''))
-        obs = limpar_txt(item.get('Obs', ''))
+        pdf.multi_cell(0, 6, f"Local: {limpar_txt(item.get('Setor',''))}\nObs: {limpar_txt(item.get('Obs',''))}")
         
-        pdf.multi_cell(0, 6, f"Local: {setor}\nSituacao: {sit} | Risco: {grav}\nObs: {obs}")
-        
-        # Lógica de Imagem Híbrida (Binária ou Link)
-        img_buffer = None
-        
-        # 1. Se tem o binário (acabou de tirar a foto)
-        if 'Foto_Binaria' in item and item['Foto_Binaria']:
-            img_buffer = item['Foto_Binaria']
-        # 2. Se tem link (histórico)
-        elif 'Foto_Link' in item and str(item['Foto_Link']).startswith('http'):
-            img_buffer = baixar_imagem_url(item['Foto_Link'])
+        img = None
+        if 'Foto_Binaria' in item and item['Foto_Binaria']: img = item['Foto_Binaria']
+        elif 'Foto_Link' in item and str(item['Foto_Link']).startswith('http'): img = baixar_imagem_url(item['Foto_Link'])
             
-        if img_buffer:
+        if img:
             try:
-                # Salva em arquivo temporário para o FPDF ler
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
-                    # Se for BytesIO, pega o valor, se for UploadedFile, também
-                    val = img_buffer.getvalue() if hasattr(img_buffer, 'getvalue') else img_buffer.read()
-                    t.write(val)
-                    t.flush()
+                    t.write(img.getvalue() if hasattr(img, 'getvalue') else img.read())
                     pdf.image(t.name, x=10, w=80)
-            except Exception as e:
-                pdf.set_font("Arial", "I", 8)
-                pdf.cell(0, 10, f"[Erro Imagem: {str(e)}]", 0, 1)
-                
+            except: pass
         pdf.ln(5)
     return bytes(pdf.output(dest='S'))
 
@@ -241,7 +208,7 @@ if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notifi
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v9.1 - PDF Fix")
+    st.caption("v9.2 - Correção Selectbox")
     menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -294,7 +261,8 @@ elif menu == "📅 Gestão de Documentos":
         df_prazos, num_rows="dynamic", use_container_width=True, hide_index=True,
         column_config={
             "Progresso": st.column_config.ProgressColumn("Conclusão", min_value=0, max_value=100, format="%d%%"),
-            "Status": st.column_config.SelectColumn("Risco", options=["NORMAL", "ALTO", "CRÍTICO"], required=True),
+            # --- AQUI ESTAVA O ERRO, CORRIGIDO PARA SELECTBOXCOLUMN ---
+            "Status": st.column_config.SelectboxColumn("Risco (Manual)", options=["NORMAL", "ALTO", "CRÍTICO"], required=True),
             "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
             "Documento": st.column_config.TextColumn("Nome", width="large"),
         }, key="editor_docs"
@@ -365,7 +333,7 @@ elif menu == "📂 Relatórios":
             sel = st.selectbox("Data:", df_hist['Data'].unique())
             df_f = df_hist[df_hist['Data'] == sel]
             st.dataframe(df_f, use_container_width=True, hide_index=True)
-            if st.button(f"📥 Baixar PDF Histórico de {sel}"):
+            if st.button(f"📥 Re-gerar PDF de {sel}"):
                 lista = df_f.to_dict('records')
                 pdf = gerar_pdf(lista)
-                st.download_button("Download PDF", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
+                st.download_button("Baixar PDF Histórico", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
