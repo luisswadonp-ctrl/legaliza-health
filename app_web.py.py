@@ -43,11 +43,13 @@ st.markdown("""
 <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     div[data-testid="metric-container"] {
-        background-color: #1f2937; border: 1px solid #374151; padding: 15px; border-radius: 10px;
+        background-color: #1f2937; border: 1px solid #374151;
+        padding: 15px; border-radius: 10px;
     }
     .stButton>button {
         border-radius: 8px; font-weight: bold; text-transform: uppercase;
-        background-image: linear-gradient(to right, #2563eb, #1d4ed8); border: none; color: white;
+        background-image: linear-gradient(to right, #2563eb, #1d4ed8);
+        border: none; color: white;
     }
     .stRadio > label { font-weight: bold; font-size: 1.1em; }
 </style>
@@ -84,7 +86,7 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
-# --- FUNÇÕES DE DADOS (CORRIGIDAS PARA EVITAR KEYERROR) ---
+# --- FUNÇÕES DE DADOS ---
 
 def carregar_tudo():
     try:
@@ -95,7 +97,7 @@ def carregar_tudo():
             ws_prazos = sh.worksheet("Prazos")
             df_prazos = pd.DataFrame(ws_prazos.get_all_records())
         except:
-            # Se a aba não existe ou está vazia, cria DF vazio
+            # Se a aba não existe ou está vazia
             df_prazos = pd.DataFrame()
 
         # --- CARREGA CHECKLIST ---
@@ -108,12 +110,10 @@ def carregar_tudo():
             df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
         # --- VACINA CONTRA KEYERROR ---
-        # Garante que as colunas existam, mesmo que a planilha esteja vazia/errada
         colunas_obrigatorias = ["Documento", "Vencimento", "Status", "Progresso", "Concluido"]
-        
         for col in colunas_obrigatorias:
             if col not in df_prazos.columns:
-                df_prazos[col] = "" # Cria coluna vazia
+                df_prazos[col] = "" 
         
         # Tratamento de Tipos
         if not df_prazos.empty:
@@ -126,7 +126,6 @@ def carregar_tudo():
         return df_prazos, df_check
     except Exception as e:
         st.error(f"Erro ao carregar dados: {e}")
-        # Retorna DFs vazios com estrutura correta para não quebrar a tela
         return pd.DataFrame(columns=["Documento", "Vencimento", "Status", "Progresso", "Concluido"]), pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
 def salvar_alteracoes_completo(df_prazos, df_checklist):
@@ -136,7 +135,6 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_prazos = sh.worksheet("Prazos")
         ws_prazos.clear()
         df_p = df_prazos.copy()
-        # Garante formato texto para não quebrar JSON
         df_p['Vencimento'] = df_p['Vencimento'].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
         df_p['Concluido'] = df_p['Concluido'].astype(str)
         ws_prazos.update([df_p.columns.values.tolist()] + df_p.values.tolist())
@@ -231,7 +229,7 @@ if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notifi
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v10.1 - Anti-Crash")
+    st.caption("v10.2 - Create Fix")
     menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -246,13 +244,14 @@ try:
         for index, row in df_p.iterrows():
             try:
                 dias = (row['Vencimento'] - hoje).days
+                # Só alerta se o progresso não for 100%
                 if dias < 0 and row['Progresso'] < 100: lista_alerta.append(f"⛔ ATRASADO: {row['Documento']}")
                 elif dias <= 5 and row['Progresso'] < 100: lista_alerta.append(f"⚠️ VENCE EM {dias} DIAS: {row['Documento']}")
             except: pass
         if lista_alerta:
             msg = "\n".join(lista_alerta[:5])
             if len(lista_alerta) > 5: msg += "\n..."
-            enviar_notificacao_push(f"🚨 ALERTAS DE PRAZO", msg, "high")
+            enviar_notificacao_push(f"🚨 {len(lista_alerta)} ALERTAS", msg, "high")
             st.session_state['ultima_notificacao'] = agora
             st.toast("🤖 Alertas enviados!")
 except: pass
@@ -267,17 +266,14 @@ if menu == "📊 Dashboard":
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     
     c1, c2, c3 = st.columns(3)
-    c1.metric("🔴 Risco Crítico", n_crit, delta="Manual", delta_color="inverse")
+    c1.metric("🔴 Documentos Críticos", n_crit, delta="Manual", delta_color="inverse")
     c2.metric("🟠 Risco Alto", n_alto, delta_color="off")
     c3.metric("📋 Total", len(df_p))
-    
     st.markdown("---")
-    
     if n_crit > 0:
         st.error(f"⚠️ {n_crit} Documentos marcados como CRÍTICOS (Ação Manual)")
         st.dataframe(df_p[df_p['Status'] == "CRÍTICO"][['Documento', 'Vencimento', 'Progresso', 'Status']], use_container_width=True, hide_index=True)
-    else:
-        st.success("Tudo sob controle.")
+    else: st.success("Tudo sob controle.")
 
 elif menu == "📅 Gestão de Documentos":
     st.title("Gestão de Documentos & Checklist")
@@ -297,9 +293,13 @@ elif menu == "📅 Gestão de Documentos":
             if st.button("Criar"):
                 if novo_nome and novo_nome not in df_prazos['Documento'].values:
                     novo_item = {"Documento": novo_nome, "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
-                    df_prazos = pd.concat([pd.DataFrame([novo_item]), df_prazos], ignore_index=True)
-                    st.success("Criado! Selecione abaixo.")
-                    st.rerun()
+                    df_temp = pd.concat([pd.DataFrame([novo_item]), df_prazos], ignore_index=True)
+                    # CORREÇÃO: Salva no Sheet e Atualiza Session AGORA
+                    if salvar_alteracoes_completo(df_temp, df_checklist):
+                        st.session_state['dados_cache'] = (df_temp, df_checklist)
+                        st.success("Criado!")
+                        time.sleep(0.5)
+                        st.rerun()
         
         lista_docs = df_prazos['Documento'].unique().tolist()
         if not lista_docs:
@@ -313,17 +313,20 @@ elif menu == "📅 Gestão de Documentos":
             st.subheader(f"📝 Editando: {doc_selecionado}")
             
             with st.container(border=True):
-                idx = df_prazos[df_prazos['Documento'] == doc_selecionado].index[0]
+                # Busca índice
+                indices = df_prazos[df_prazos['Documento'] == doc_selecionado].index
+                if indices.empty:
+                    st.error("Erro ao selecionar. Recarregue a página.")
+                    st.stop()
+                idx = indices[0]
                 
                 c1, c2 = st.columns(2)
                 
-                # Proteção caso o valor da planilha não esteja na lista de opções
                 valor_status = df_prazos.at[idx, 'Status']
-                opcoes_status = ["NORMAL", "ALTO", "CRÍTICO"]
-                if valor_status not in opcoes_status: valor_status = "NORMAL"
+                if valor_status not in ["NORMAL", "ALTO", "CRÍTICO"]: valor_status = "NORMAL"
                 
-                novo_risco = c1.selectbox("Nível de Risco", opcoes_status, 
-                                          index=opcoes_status.index(valor_status),
+                novo_risco = c1.selectbox("Nível de Risco", ["NORMAL", "ALTO", "CRÍTICO"], 
+                                          index=["NORMAL", "ALTO", "CRÍTICO"].index(valor_status),
                                           key="sel_risco")
                 
                 data_atual = df_prazos.at[idx, 'Vencimento']
