@@ -6,16 +6,23 @@ from fpdf import FPDF
 import tempfile
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 import base64
 import requests
 import streamlit.components.v1 as components
 import pytz
+import io
 
 # --- 1. CONFIGURAÇÃO GERAL ---
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
 
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_GERAL = 60 
+
+# --- ⚠️ COLE O ID DA SUA PASTA DO GOOGLE DRIVE AQUI EMBAIXO ---
+ID_PASTA_DRIVE = "COLOQUE_O_ID_DA_SUA_PASTA_AQUI" 
+# Exemplo: "1PoX...kL9s"
 
 # --- AUTO-REFRESH ---
 components.html("""
@@ -26,7 +33,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES VISUAIS ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -50,12 +57,45 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def conectar_gsheets():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+# --- 2. CONEXÃO E DADOS ---
+
+def get_creds():
+    scope = [
+        "https://spreadsheets.google.com/feeds", 
+        "https://www.googleapis.com/auth/drive"
+    ]
     creds_dict = st.secrets["gcp_service_account"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    return ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+
+def conectar_gsheets():
+    creds = get_creds()
     client = gspread.authorize(creds)
     return client.open("LegalizaHealth_DB")
+
+def upload_foto_drive(foto_binaria, nome_arquivo):
+    """Sobe a foto para o Drive e retorna o Link"""
+    if not ID_PASTA_DRIVE or ID_PASTA_DRIVE == "COLOQUE_O_ID_DA_SUA_PASTA_AQUI":
+        st.error("ERRO: Configure o ID da pasta do Drive no código!")
+        return ""
+        
+    try:
+        creds = get_creds()
+        service = build('drive', 'v3', credentials=creds)
+        
+        file_metadata = {
+            'name': nome_arquivo,
+            'parents': [ID_PASTA_DRIVE]
+        }
+        
+        media = MediaIoBaseUpload(foto_binaria, mimetype='image/jpeg')
+        
+        file = service.files().create(body=file_metadata, media_body=media, fields='id, webContentLink').execute()
+        
+        # Retorna o link de download direto
+        return file.get('webContentLink', '')
+    except Exception as e:
+        st.error(f"Erro upload Drive: {e}")
+        return ""
 
 def enviar_resumo_push(lista_problemas):
     qtd = len(lista_problemas)
@@ -106,10 +146,33 @@ def salvar_vistoria_db(lista_itens):
         sh = conectar_gsheets()
         try: ws = sh.worksheet("Vistorias")
         except: ws = sh.add_worksheet(title="Vistorias", rows=1000, cols=10)
+        
+        # Garante que o cabeçalho tenha a coluna Foto
+        header = ws.row_values(1)
+        if "Foto_Link" not in header:
+            ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data", "Foto_Link"])
+            
         hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y")
-        for item in lista_itens:
-            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje])
-    except: st.error("Erro salvar vistoria.")
+        
+        progresso = st.progress(0, text="Salvando fotos no Drive...")
+        total = len(lista_itens)
+        
+        for i, item in enumerate(lista_itens):
+            link_foto = ""
+            # Se tiver foto, faz upload
+            if item.get('Foto_Binaria'):
+                nome_arq = f"Vistoria_{hoje.replace('/','-')}_{item['Item']}.jpg"
+                link_foto = upload_foto_drive(item['Foto_Binaria'], nome_arq)
+            
+            ws.append_row([
+                item['Setor'], item['Item'], item['Situação'], 
+                item['Gravidade'], item['Obs'], hoje, link_foto
+            ])
+            progresso.progress((i + 1) / total)
+            
+        progresso.empty()
+        
+    except Exception as e: st.error(f"Erro salvar vistoria: {e}")
 
 def carregar_dados_prazos():
     try:
@@ -131,10 +194,8 @@ def carregar_historico_vistorias():
     try:
         sh = conectar_gsheets()
         ws = sh.worksheet("Vistorias")
-        data = ws.get_all_records()
-        return pd.DataFrame(data)
-    except:
-        return pd.DataFrame()
+        return pd.DataFrame(ws.get_all_records())
+    except: return pd.DataFrame()
 
 def calcular_status_e_texto(data_venc, concluido):
     if concluido: return 999, "✅ RESOLVIDO", "---"
@@ -160,6 +221,7 @@ def calcular_status_e_texto(data_venc, concluido):
         txt = f"📅 {dias} dias restantes"
     return dias, status, txt
 
+# --- PDF GENERATOR ---
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 12)
@@ -168,31 +230,42 @@ class PDF(FPDF):
 def limpar_txt(t):
     return str(t).replace("✅","").replace("❌","").encode('latin-1','replace').decode('latin-1')
 
-def gerar_pdf(vistorias):
+def baixar_imagem_url(url):
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            return io.BytesIO(response.content)
+    except: pass
+    return None
+
+def gerar_pdf(vistorias, eh_historico=False):
     pdf = PDF()
     pdf.add_page()
+    
     for i, item in enumerate(vistorias):
         pdf.set_font("Arial", 'B', 12)
-        item_nome = item.get('Item', 'Item sem nome')
-        pdf.cell(0, 10, f"Item #{i+1}: {limpar_txt(item_nome)}", 0, 1)
-        
+        pdf.cell(0, 10, f"Item #{i+1}: {limpar_txt(item['Item'])}", 0, 1)
         pdf.set_font("Arial", size=10)
-        setor = item.get('Setor', '')
-        obs = item.get('Obs', '')
-        sit = item.get('Situação', '')
+        pdf.multi_cell(0, 6, f"Local: {limpar_txt(item['Setor'])}\nObs: {limpar_txt(item.get('Obs',''))}")
         
-        pdf.multi_cell(0, 6, f"Local: {limpar_txt(setor)}\nSituacao: {limpar_txt(sit)}\nObs: {limpar_txt(obs)}")
+        # LÓGICA DE FOTO HÍBRIDA
+        imagem_para_pdf = None
         
-        # Tenta pegar foto se existir (só funciona na sessão atual)
+        # 1. Se for vistoria de agora (tem binário na memória)
         if 'Foto_Binaria' in item and item['Foto_Binaria']:
+            imagem_para_pdf = item['Foto_Binaria']
+        
+        # 2. Se for histórico (tem Link do Drive)
+        elif 'Foto_Link' in item and item['Foto_Link'] and str(item['Foto_Link']).startswith('http'):
+            imagem_para_pdf = baixar_imagem_url(item['Foto_Link'])
+            
+        # Inserir no PDF
+        if imagem_para_pdf:
             try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
-                    t.write(item['Foto_Binaria'].getbuffer())
+                    t.write(imagem_para_pdf.getvalue() if hasattr(imagem_para_pdf, 'getvalue') else imagem_para_pdf.read())
                     pdf.image(t.name, w=60)
             except: pass
-        else:
-            pdf.set_font("Arial", "I", 8)
-            pdf.cell(0, 10, "(Foto disponivel apenas no relatorio original do dia)", 0, 1)
             
         pdf.ln(5)
     return bytes(pdf.output(dest='S'))
@@ -300,42 +373,32 @@ elif menu == "📸 Nova Vistoria":
 elif menu == "📂 Relatórios":
     st.title("Central de Relatórios")
     
-    tab1, tab2 = st.tabs(["📝 Vistoria Atual", "🗄️ Histórico Completo (Banco de Dados)"])
+    tab1, tab2 = st.tabs(["📝 Vistoria Atual", "🗄️ Histórico Completo"])
     
-    # --- TAB 1: SESSÃO ATUAL ---
+    # --- TAB 1 ---
     with tab1:
         qtd = len(st.session_state['vistorias'])
-        st.metric("Itens Vistoriados Hoje", qtd)
+        st.metric("Itens Hoje", qtd)
         if qtd > 0:
             c1, c2 = st.columns(2)
-            if c1.button("☁️ Salvar Nuvem", key="bt_salvar"): 
+            if c1.button("☁️ Salvar Nuvem (Com Fotos)"): 
                 salvar_vistoria_db(st.session_state['vistorias'])
-                st.toast("Salvo!")
+                st.toast("Salvo no Drive e Planilha!")
+            
             pdf = gerar_pdf(st.session_state['vistorias'])
-            c2.download_button("📥 Baixar PDF (Com Fotos)", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
-        else:
-            st.info("Nenhuma vistoria feita agora.")
+            c2.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
 
-    # --- TAB 2: HISTÓRICO ---
+    # --- TAB 2 (AQUI AS FOTOS VAO APARECER SE ESTIVEREM NO DRIVE) ---
     with tab2:
-        st.caption("Consulte vistorias passadas salvas no Google Sheets.")
         df_hist = carregar_historico_vistorias()
-        
         if not df_hist.empty:
-            # Filtro de Data
-            datas_disponiveis = df_hist['Data'].unique()
-            data_selecionada = st.selectbox("Selecione a Data do Relatório:", datas_disponiveis)
+            datas = df_hist['Data'].unique()
+            sel_data = st.selectbox("Filtrar Data:", datas)
+            df_filtro = df_hist[df_hist['Data'] == sel_data]
             
-            # Filtra DF
-            df_filtrado = df_hist[df_hist['Data'] == data_selecionada]
+            st.dataframe(df_filtro, use_container_width=True, hide_index=True)
             
-            st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
-            
-            if st.button(f"📥 Re-gerar PDF de {data_selecionada}"):
-                # Converte para lista de dicionários
-                lista_recuperada = df_filtrado.to_dict('records')
-                # Gera PDF (sem fotos, pois não salvamos no sheets)
-                pdf_hist = gerar_pdf(lista_recuperada)
-                st.download_button("Baixar Arquivo", data=pdf_hist, file_name=f"Relatorio_{data_selecionada}.pdf", mime="application/pdf")
-        else:
-            st.warning("Nenhum histórico encontrado na planilha.")
+            if st.button(f"📥 Re-gerar PDF de {sel_data}"):
+                lista = df_filtro.to_dict('records')
+                pdf_h = gerar_pdf(lista, eh_historico=True)
+                st.download_button("Baixar PDF Histórico", data=pdf_h, file_name=f"Relatorio_{sel_data}.pdf", mime="application/pdf")
