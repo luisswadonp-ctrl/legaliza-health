@@ -49,7 +49,6 @@ st.markdown("""
         border-radius: 8px; font-weight: bold; text-transform: uppercase;
         background-image: linear-gradient(to right, #2563eb, #1d4ed8); border: none; color: white;
     }
-    /* Destaque para o item selecionado */
     .stRadio > label { font-weight: bold; font-size: 1.1em; }
 </style>
 """, unsafe_allow_html=True)
@@ -85,12 +84,21 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
+# --- FUNÇÕES DE DADOS (CORRIGIDAS PARA EVITAR KEYERROR) ---
+
 def carregar_tudo():
     try:
         sh = conectar_gsheets()
-        ws_prazos = sh.worksheet("Prazos")
-        df_prazos = pd.DataFrame(ws_prazos.get_all_records())
         
+        # --- CARREGA PRAZOS ---
+        try:
+            ws_prazos = sh.worksheet("Prazos")
+            df_prazos = pd.DataFrame(ws_prazos.get_all_records())
+        except:
+            # Se a aba não existe ou está vazia, cria DF vazio
+            df_prazos = pd.DataFrame()
+
+        # --- CARREGA CHECKLIST ---
         try:
             ws_check = sh.worksheet("Checklist_Itens")
             df_check = pd.DataFrame(ws_check.get_all_records())
@@ -99,25 +107,27 @@ def carregar_tudo():
             ws_check.append_row(["Documento_Ref", "Tarefa", "Feito"])
             df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
+        # --- VACINA CONTRA KEYERROR ---
+        # Garante que as colunas existam, mesmo que a planilha esteja vazia/errada
+        colunas_obrigatorias = ["Documento", "Vencimento", "Status", "Progresso", "Concluido"]
+        
+        for col in colunas_obrigatorias:
+            if col not in df_prazos.columns:
+                df_prazos[col] = "" # Cria coluna vazia
+        
+        # Tratamento de Tipos
         if not df_prazos.empty:
-            # Garante colunas essenciais
-            for col in ["Documento", "Vencimento", "Status", "Progresso"]:
-                if col not in df_prazos.columns: df_prazos[col] = ""
-            
-            # Tratamento de erro na conversão de progresso
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
-            
-            # Tratamento de Data
             df_prazos['Vencimento'] = pd.to_datetime(df_prazos['Vencimento'], dayfirst=True, errors='coerce').dt.date
         
-        # Garante estrutura do checklist
         if df_check.empty:
              df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
         
         return df_prazos, df_check
     except Exception as e:
         st.error(f"Erro ao carregar dados: {e}")
-        return pd.DataFrame(), pd.DataFrame()
+        # Retorna DFs vazios com estrutura correta para não quebrar a tela
+        return pd.DataFrame(columns=["Documento", "Vencimento", "Status", "Progresso", "Concluido"]), pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
 def salvar_alteracoes_completo(df_prazos, df_checklist):
     try:
@@ -126,7 +136,9 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_prazos = sh.worksheet("Prazos")
         ws_prazos.clear()
         df_p = df_prazos.copy()
+        # Garante formato texto para não quebrar JSON
         df_p['Vencimento'] = df_p['Vencimento'].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
+        df_p['Concluido'] = df_p['Concluido'].astype(str)
         ws_prazos.update([df_p.columns.values.tolist()] + df_p.values.tolist())
         
         ws_check = sh.worksheet("Checklist_Itens")
@@ -219,7 +231,7 @@ if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notifi
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v10.0 - Split View")
+    st.caption("v10.1 - Anti-Crash")
     menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -234,7 +246,6 @@ try:
         for index, row in df_p.iterrows():
             try:
                 dias = (row['Vencimento'] - hoje).days
-                # Só alerta se o progresso não for 100%
                 if dias < 0 and row['Progresso'] < 100: lista_alerta.append(f"⛔ ATRASADO: {row['Documento']}")
                 elif dias <= 5 and row['Progresso'] < 100: lista_alerta.append(f"⚠️ VENCE EM {dias} DIAS: {row['Documento']}")
             except: pass
@@ -256,7 +267,7 @@ if menu == "📊 Dashboard":
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     
     c1, c2, c3 = st.columns(3)
-    c1.metric("🔴 Documentos Críticos", n_crit, delta="Definido pelo Usuário", delta_color="inverse")
+    c1.metric("🔴 Risco Crítico", n_crit, delta="Manual", delta_color="inverse")
     c2.metric("🟠 Risco Alto", n_alto, delta_color="off")
     c3.metric("📋 Total", len(df_p))
     
@@ -277,30 +288,19 @@ elif menu == "📅 Gestão de Documentos":
     
     df_prazos, df_checklist = st.session_state['dados_cache']
     
-    # LAYOUT DIVIDIDO (Esquerda: Lista / Direita: Detalhes)
     col_lista, col_detalhe = st.columns([1, 2])
     
-    # --- COLUNA DA ESQUERDA: LISTA DE DOCUMENTOS ---
     with col_lista:
         st.subheader("📂 Seus Documentos")
-        
-        # 1. Adicionar Novo
         with st.expander("➕ Novo Documento"):
             novo_nome = st.text_input("Nome do Documento")
             if st.button("Criar"):
                 if novo_nome and novo_nome not in df_prazos['Documento'].values:
-                    novo_item = {
-                        "Documento": novo_nome, 
-                        "Vencimento": date.today(), 
-                        "Status": "NORMAL", 
-                        "Progresso": 0,
-                        "Concluido": "False" # Legado
-                    }
+                    novo_item = {"Documento": novo_nome, "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
                     df_prazos = pd.concat([pd.DataFrame([novo_item]), df_prazos], ignore_index=True)
                     st.success("Criado! Selecione abaixo.")
-                    st.rerun() # Recarrega para aparecer na lista
+                    st.rerun()
         
-        # 2. Seletor (Radio Button funciona como menu)
         lista_docs = df_prazos['Documento'].unique().tolist()
         if not lista_docs:
             st.info("Nenhum documento.")
@@ -308,77 +308,63 @@ elif menu == "📅 Gestão de Documentos":
         else:
             doc_selecionado = st.radio("Selecione para editar:", lista_docs, label_visibility="collapsed")
 
-    # --- COLUNA DA DIREITA: DETALHES E CHECKLIST ---
     with col_detalhe:
         if doc_selecionado:
             st.subheader(f"📝 Editando: {doc_selecionado}")
             
-            # --- CARD DE DADOS PRINCIPAIS ---
             with st.container(border=True):
-                # Encontra a linha do documento selecionado
                 idx = df_prazos[df_prazos['Documento'] == doc_selecionado].index[0]
                 
                 c1, c2 = st.columns(2)
-                # Inputs diretos (sem data_editor para simplificar a UX)
-                novo_risco = c1.selectbox("Nível de Risco", ["NORMAL", "ALTO", "CRÍTICO"], 
-                                          index=["NORMAL", "ALTO", "CRÍTICO"].index(df_prazos.at[idx, 'Status']),
+                
+                # Proteção caso o valor da planilha não esteja na lista de opções
+                valor_status = df_prazos.at[idx, 'Status']
+                opcoes_status = ["NORMAL", "ALTO", "CRÍTICO"]
+                if valor_status not in opcoes_status: valor_status = "NORMAL"
+                
+                novo_risco = c1.selectbox("Nível de Risco", opcoes_status, 
+                                          index=opcoes_status.index(valor_status),
                                           key="sel_risco")
                 
-                # Tratamento data
                 data_atual = df_prazos.at[idx, 'Vencimento']
                 if pd.isnull(data_atual): data_atual = date.today()
                 
                 nova_data = c2.date_input("Prazo Limite", value=data_atual, format="DD/MM/YYYY", key="date_prazo")
                 
-                # Atualiza DF Prazos em tempo real na memória
                 df_prazos.at[idx, 'Status'] = novo_risco
                 df_prazos.at[idx, 'Vencimento'] = nova_data
 
-            # --- ÁREA DE CHECKLIST ---
             st.write("✅ **Etapas e Tarefas**")
             
-            # Filtra Checklist
             df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
             mask = df_checklist['Documento_Ref'] == doc_selecionado
             df_tarefas = df_checklist[mask].copy()
             
-            # Se vazio, cria linha
             if df_tarefas.empty:
-                df_tarefas = pd.DataFrame([{"Documento_Ref": doc_selecionado, "Tarefa": "Ex: Solicitar boleto...", "Feito": False}])
+                df_tarefas = pd.DataFrame([{"Documento_Ref": doc_selecionado, "Tarefa": "Nova Tarefa...", "Feito": False}])
             
-            # Tabela Editável de Tarefas
             df_tarefas_editado = st.data_editor(
-                df_tarefas,
-                num_rows="dynamic",
-                use_container_width=True,
-                hide_index=True,
+                df_tarefas, num_rows="dynamic", use_container_width=True, hide_index=True,
                 column_config={
-                    "Documento_Ref": None, # Esconde essa coluna
+                    "Documento_Ref": st.column_config.TextColumn("Ref", disabled=True),
                     "Tarefa": st.column_config.TextColumn("Descrição", width="large"),
                     "Feito": st.column_config.CheckboxColumn("OK?", width="small")
-                },
-                key="editor_tarefas_split"
+                }, key="editor_tarefas_split"
             )
             
-            # --- CÁLCULO DE PROGRESSO ---
             total = len(df_tarefas_editado)
             feitos = len(df_tarefas_editado[df_tarefas_editado['Feito'] == True])
             pct = int((feitos/total)*100) if total > 0 else 0
             
-            # Atualiza DF Prazos com o progresso novo
             df_prazos.at[idx, 'Progresso'] = pct
-            
             st.progress(pct, text=f"Progresso: {pct}% Concluído")
             
-            # --- ATUALIZAÇÃO DO CHECKLIST MESTRE ---
-            # Remove velhos, adiciona novos
             df_checklist = df_checklist[~mask]
-            df_tarefas_editado['Documento_Ref'] = doc_selecionado # Garante integridade
+            df_tarefas_editado['Documento_Ref'] = doc_selecionado
             df_checklist = pd.concat([df_checklist, df_tarefas_editado], ignore_index=True)
             
             st.markdown("---")
             if st.button("💾 SALVAR ALTERAÇÕES", type="primary", use_container_width=True):
-                # Atualiza sessão
                 st.session_state['dados_cache'] = (df_prazos, df_checklist)
                 if salvar_alteracoes_completo(df_prazos, df_checklist):
                     time.sleep(0.5)
