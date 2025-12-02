@@ -39,7 +39,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES CORE ---
+# --- FUNÇÕES ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -51,6 +51,26 @@ img_loading = get_img_as_base64("loading.gif")
 def safe_prog(val):
     try: return max(0, min(100, int(float(val))))
     except: return 0
+
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; color: #e0e0e0; }
+    div[data-testid="metric-container"] {
+        background-color: #1f2937; border: 1px solid #374151;
+        padding: 15px; border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    }
+    .stButton>button {
+        border-radius: 8px; font-weight: 600; text-transform: uppercase;
+        background-image: linear-gradient(to right, #2563eb, #1d4ed8);
+        border: none; color: white;
+    }
+    .stProgress > div > div > div > div { background-color: #00c853; }
+    
+    /* Layout Mobile: Tabela e Gráfico Empilhados */
+    [data-testid="stDataFrame"] { width: 100%; border-radius: 8px; }
+</style>
+""", unsafe_allow_html=True)
 
 def get_creds():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -257,7 +277,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v31.0 - Estabilidade Final")
+    st.caption("v30.0 - Mobile Final")
 
 # --- ROBÔ ---
 try:
@@ -272,13 +292,21 @@ try:
             try:
                 dias = (row['Vencimento'] - hoje).days
                 prog = safe_prog(row['Progresso'])
-                if dias < 0 and prog < 100: lista_alerta.append(f"⛔ ATRASADO: {row['Documento']}")
-                elif dias <= 5 and prog < 100: lista_alerta.append(f"⚠️ VENCE EM {dias} DIAS: {row['Documento']}")
+                if row['Status'] in ["ALTO", "CRÍTICO"] and prog < 100:
+                    status_alerta = f"{row['Status']} (Manual)"
+                    lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
+                elif dias <= 5 and prog < 100 and row['Status'] not in ["CRÍTICO", "ALTO"]:
+                    status_alerta = f"PRAZO PRÓXIMO"
+                    lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
             except: pass
+        
         if lista_alerta:
-            msg = "\n".join(lista_alerta[:5])
-            if len(lista_alerta) > 5: msg += "\n..."
-            enviar_notificacao_push(f"🚨 ALERTAS", msg, "high")
+            msg_push = "Lista de Pendências:\n\n"
+            for p in lista_alerta[:5]:
+                msg_push += f"- {p['unidade']} ({p['setor']}) - {p['doc']} - Risco: {p['status']}\n"
+            if len(lista_alerta) > 5: msg_push += f"...e mais {len(lista_alerta) - 5} itens."
+            
+            enviar_notificacao_push(f"🚨 {len(lista_alerta)} ALERTAS ATIVOS", msg_push, "high")
             st.session_state['ultima_notificacao'] = agora
             st.toast("🤖 Alertas enviados!")
 except: pass
@@ -298,6 +326,8 @@ if menu == "Painel Geral":
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
     
+    # LAYOUT MOBILE: KPIs empilhados, Tabela e Gráfico empilhados.
+    
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
@@ -306,9 +336,7 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # LAYOUT MOBILE: Tabela e Gráfico Empilhados
-    
-    # 1. TABELA DE ALERTA
+    # 1. TABELA DE ALERTA (Filtra de acordo com o clique)
     f_atual = st.session_state['filtro_dash']
     st.subheader(f"Lista de Processos: {f_atual}")
     df_show = df_p.copy()
@@ -331,7 +359,7 @@ if menu == "Painel Geral":
 
     st.markdown("---")
     
-    # 2. GRÁFICO
+    # 2. GRÁFICO (Abaixo da Tabela)
     st.subheader("Panorama")
     if not df_p.empty and TEM_PLOTLY:
         status_counts = df_p['Status'].value_counts()
@@ -418,7 +446,6 @@ elif menu == "Gestão de Docs":
                     opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
                     if st_curr not in opcoes: st_curr = "NORMAL"
 
-                    # CORRIGIDO: CHAVE ÚNICA E INICIALIZAÇÃO CORRETA
                     novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
                     
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
