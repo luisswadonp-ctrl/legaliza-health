@@ -52,21 +52,21 @@ def safe_prog(val):
     try: return max(0, min(100, int(float(val))))
     except: return 0
 
+# CSS PREMIUM
 st.markdown("""
 <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     
-    /* Barra de Progresso */
+    /* Barra de Progresso VERDE */
     .stProgress > div > div > div > div { background-color: #00c853; }
     
-    /* Cards de Métricas Clicáveis */
-    div[data-testid="stMetric"] {
-        background-color: #1f2937;
-        padding: 10px;
-        border-radius: 8px;
-        border: 1px solid #374151;
+    /* Cards de Métricas */
+    div[data-testid="metric-container"] {
+        background-color: #1f2937; border: 1px solid #374151;
+        padding: 20px; border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
-
+    
     /* Botões */
     .stButton>button {
         border-radius: 8px; font-weight: 600; text-transform: uppercase;
@@ -74,8 +74,8 @@ st.markdown("""
         border: none; color: white;
     }
     
-    /* Ajuste de Títulos */
-    h1, h2, h3 { font-family: 'Helvetica', sans-serif; font-weight: 600; color: #f0f2f6; }
+    /* Remove padding extra */
+    .block-container { padding-top: 2rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -145,26 +145,18 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         sh = conectar_gsheets()
         ws_prazos = sh.worksheet("Prazos")
         ws_prazos.clear()
-        
-        # PREPARA PARA SALVAR (CRUCIAL: CONVERTE DATAS PARA STRING)
         df_p = df_prazos.copy()
         
-        # 1. Converte Datas
-        for c_date in ['Vencimento', 'Data_Recebimento']:
-            # Verifica se a coluna tem dados de data antes de tentar formatar
-            df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if isinstance(x, (date, datetime)) else str(x))
-            
-        # 2. Converte Outros Tipos
-        df_p['Concluido'] = df_p['Concluido'].astype(str)
-        df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
-        
-        # 3. Garante Ordem das Colunas (Para bater com o Sheets)
+        # Garante colunas na ordem certa
         colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
-        # Adiciona colunas que faltam se precisar
         for c in colunas_ordem:
             if c not in df_p.columns: df_p[c] = ""
-        df_p = df_p[colunas_ordem] # Reordena
-        
+        df_p = df_p[colunas_ordem]
+
+        for c_date in ['Vencimento', 'Data_Recebimento']:
+            df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
+        df_p['Concluido'] = df_p['Concluido'].astype(str)
+        df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
         ws_prazos.update([df_p.columns.values.tolist()] + df_p.values.tolist())
         
         ws_check = sh.worksheet("Checklist_Itens")
@@ -172,10 +164,10 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_c = df_checklist.copy()
         df_c['Feito'] = df_c['Feito'].astype(str)
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
-        st.toast("✅ Salvo com sucesso!", icon="☁️")
+        st.toast("✅ Salvo!", icon="☁️")
         return True
     except Exception as e:
-        st.error(f"Erro ao salvar: {str(e)}")
+        st.error(f"Erro ao salvar: {e}")
         return False
 
 def salvar_vistoria_db(lista_itens):
@@ -241,13 +233,12 @@ def gerar_pdf(vistorias):
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
 if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notificacao'] = datetime.min
 if 'doc_focado' not in st.session_state: st.session_state['doc_focado'] = None
-# Estado do filtro do dashboard
 if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TODOS"
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v19.0 - BI & Setor")
+    st.caption("v20.0 - Clean & Fast")
     menu = st.radio("Menu", ["📊 Painel de Controle", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -282,29 +273,19 @@ if menu == "📊 Painel de Controle":
     if 'dados_cache' in st.session_state: df_p = st.session_state['dados_cache'][0]
     else: df_p, _ = carregar_tudo()
     
-    # KPIs
     n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
     
-    # Filtros Clicáveis
     c1, c2, c3, c4 = st.columns(4)
+    if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
+    if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
+    if c3.button(f"🟢 NORMAL: {n_norm}", use_container_width=True): st.session_state['filtro_dash'] = "NORMAL"
+    if c4.button(f"📋 TOTAL: {len(df_p)}", use_container_width=True): st.session_state['filtro_dash'] = "TODOS"
     
-    # Botões que funcionam como filtro
-    if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True):
-        st.session_state['filtro_dash'] = "CRÍTICO"
-    if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True):
-        st.session_state['filtro_dash'] = "ALTO"
-    if c3.button(f"🟢 NORMAL: {n_norm}", use_container_width=True):
-        st.session_state['filtro_dash'] = "NORMAL"
-    if c4.button(f"📋 TOTAL: {len(df_p)}", use_container_width=True):
-        st.session_state['filtro_dash'] = "TODOS"
-        
     st.markdown("---")
     
-    # Layout Dashboard
     col_graf, col_tab = st.columns([1, 2])
-    
     with col_graf:
         st.subheader("Panorama")
         if not df_p.empty and TEM_PLOTLY:
@@ -313,33 +294,23 @@ if menu == "📊 Painel de Controle":
                 color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
             fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
-            
-            # Média
             media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
             st.metric("Progresso Geral", f"{media}%")
             st.progress(media)
 
     with col_tab:
         f_atual = st.session_state['filtro_dash']
-        st.subheader(f"Lista Detalhada: {f_atual}")
-        
+        st.subheader(f"Lista: {f_atual}")
         df_show = df_p.copy()
-        if f_atual != "TODOS":
-            df_show = df_show[df_show['Status'] == f_atual]
-            
+        if f_atual != "TODOS": df_show = df_show[df_show['Status'] == f_atual]
+        
         if not df_show.empty:
-            # Tabela Limpa e Direta
             st.dataframe(
                 df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso']], 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "Progresso": st.column_config.ProgressColumn("Prog", format="%d%%"),
-                    "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY")
-                }
+                use_container_width=True, hide_index=True,
+                column_config={"Progresso": st.column_config.ProgressColumn("Prog", format="%d%%"), "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY")}
             )
-        else:
-            st.info("Nenhum item neste status.")
+        else: st.info("Nenhum item.")
 
 elif menu == "📅 Gestão de Documentos":
     st.title("Gestão de Documentos")
@@ -351,7 +322,7 @@ elif menu == "📅 Gestão de Documentos":
         lista_uni = ["Todas"] + sorted(list(df_prazos['Unidade'].unique())) if 'Unidade' in df_prazos.columns else ["Todas"]
         f_uni = f1.selectbox("Unidade:", lista_uni)
         f_stt = f2.multiselect("Status:", ["CRÍTICO", "ALTO", "NORMAL"])
-        f_txt = f3.text_input("Buscar (Nome/CNPJ/Setor):")
+        f_txt = f3.text_input("Buscar (Nome/CNPJ):")
         if st.button("Limpar"): st.rerun()
 
     df_show = df_prazos.copy()
@@ -361,7 +332,7 @@ elif menu == "📅 Gestão de Documentos":
 
     col_l, col_d = st.columns([1.2, 2])
     with col_l:
-        st.info(f"Encontrados: {len(df_show)}")
+        st.info(f"Lista ({len(df_show)})")
         sel = st.dataframe(df_show[['Unidade', 'Documento', 'Status']], use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun",
             column_config={"Status": st.column_config.TextColumn("Risco", width="small")})
         
@@ -371,18 +342,15 @@ elif menu == "📅 Gestão de Documentos":
         
         st.markdown("---")
         with st.expander("➕ Novo Documento"):
-            with st.form("new"):
+            # FORMULARIO AUTO-LIMPANTE
+            with st.form("new_doc", clear_on_submit=True):
                 n_u = st.text_input("Unidade")
-                n_s = st.text_input("Setor (Ex: Raio-X)") # NOVO CAMPO
+                n_s = st.text_input("Setor")
                 n_d = st.text_input("Documento")
                 n_c = st.text_input("CNPJ")
-                if st.form_submit_button("Criar"):
+                if st.form_submit_button("ADICIONAR"):
                     if n_d:
-                        novo = {
-                            "Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, 
-                            "Data_Recebimento": date.today(), "Vencimento": date.today(), 
-                            "Status": "NORMAL", "Progresso": 0, "Concluido": "False"
-                        }
+                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
                         df_prazos = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
                         salvar_alteracoes_completo(df_prazos, df_checklist)
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
@@ -394,7 +362,7 @@ elif menu == "📅 Gestão de Documentos":
             if not indices.empty:
                 idx = indices[0]
                 st.subheader(f"📝 {doc_ativo}")
-                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
+                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']}")
                 
                 c_del, _ = st.columns([1, 4])
                 if c_del.button("🗑️ Excluir"):
@@ -422,19 +390,20 @@ elif menu == "📅 Gestão de Documentos":
                     prog = safe_prog(df_prazos.at[idx, 'Progresso'])
                     st.progress(prog, text=f"Conclusão: {prog}%")
 
-                st.write("✅ **Checklist de Etapas**")
+                st.write("✅ **Tarefas**")
                 df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
                 mask = df_checklist['Documento_Ref'] == doc_ativo
                 df_t = df_checklist[mask].copy()
                 
-                c_add, c_btn = st.columns([3, 1])
-                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed")
-                if c_btn.button("ADICIONAR"):
-                    if new_t:
-                        line = pd.DataFrame([{"Documento_Ref": doc_ativo, "Tarefa": new_t, "Feito": False}])
-                        df_checklist = pd.concat([df_checklist, line], ignore_index=True)
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                        st.rerun()
+                # FORMULARIO TAREFA AUTO-LIMPANTE
+                with st.form(key=f"add_task_{doc_ativo}", clear_on_submit=True):
+                    new_t = st.text_input("Nova tarefa...", label_visibility="collapsed")
+                    if st.form_submit_button("ADICIONAR"):
+                        if new_t:
+                            line = pd.DataFrame([{"Documento_Ref": doc_ativo, "Tarefa": new_t, "Feito": False}])
+                            df_checklist = pd.concat([df_checklist, line], ignore_index=True)
+                            st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                            st.rerun()
 
                 if not df_t.empty:
                     edited = st.data_editor(df_t, num_rows="fixed", use_container_width=True, hide_index=True,
@@ -456,7 +425,9 @@ elif menu == "📅 Gestão de Documentos":
                 st.markdown("---")
                 if st.button("💾 SALVAR TUDO NA NUVEM", type="primary"):
                     if salvar_alteracoes_completo(df_prazos, df_checklist): time.sleep(0.5); st.rerun()
-            else: st.warning("Não encontrado.")
+            else:
+                st.warning("Documento não encontrado.")
+                if st.button("Voltar"): st.session_state['doc_focado'] = None; st.rerun()
         else: st.info("👈 Selecione um documento.")
 
 elif menu == "📸 Nova Vistoria":
