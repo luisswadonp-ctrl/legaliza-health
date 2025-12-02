@@ -32,6 +32,15 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_GERAL = 120 
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ" 
 
+# --- LISTA MESTRA DE DOCUMENTOS (Para ser usada no Selectbox) ---
+# O usuário pode expandir essa lista na planilha Config_Docs
+DOCUMENTOS_BASE = [
+    "Licença de Publicidade", "Conselho de Medicina (CRM)", "Conselho de Farmácia (CRF)", "Licença Sanitária",
+    "Corpo de Bombeiros", "Alvará de Funcionamento", "CNES", "Inscrição Municipal", "Licença Ambiental",
+    "Polícia Civil (Termo de Vistoria)", "Polícia Federal (Licença)", "Projeto Arquitetonico (Visa e Prefeitura)",
+    "Habite-se", "SDR", "SMOP", "Alvará de Obra"
+]
+
 # --- AUTO-REFRESH ---
 components.html("""
 <script>
@@ -105,7 +114,7 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
 
 # --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS (AUTÔNOMO) ---
 def processar_dados_importados(uploaded_file):
-    """Mapeia o DataFrame importado autonomamente e garante a leitura completa."""
+    """Mapeia o DataFrame importado autonomamente."""
     df = pd.DataFrame()
     
     # 1. Leitura Robusta
@@ -159,7 +168,7 @@ def processar_dados_importados(uploaded_file):
         else:
             df_result[col_final] = val
             
-    # Limpeza de Documento
+    # Limpeza de Documento (Pega o melhor nome)
     doc_base = df_result.get('Documento', pd.Series([''] * len(df_result)))
     df_result['Documento'] = doc_base.apply(lambda x: x if x else 'Não Definido')
 
@@ -188,7 +197,6 @@ def processar_dados_importados(uploaded_file):
             df_final[col] = 'Não Informado'
             
     return df_final.copy()
-
 
 # --- FUNÇÕES DE CONEXÃO E SALVAMENTO ---
 
