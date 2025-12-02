@@ -13,7 +13,7 @@ import requests
 import streamlit.components.v1 as components
 import pytz
 import io
-import unicodedata # BIBLIOTECA PARA REMOVER ACENTOS
+import unicodedata
 from streamlit_option_menu import option_menu
 
 # Tenta importar Plotly
@@ -31,8 +31,25 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_CHECK_ROBO = 60
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
-# --- LISTA PADRÃO DE DOCUMENTOS ---
-LISTA_TIPOS_DOCUMENTOS = [
+# --- 2. CÉREBRO DE INTELIGÊNCIA (BASE DE CONHECIMENTO) ---
+# Aqui definimos as regras padrão para cada tipo de documento.
+# Validade em dias (0 = indefinido/variável), Risco Padrão.
+DOC_INTELLIGENCE = {
+    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura"},
+    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+anvisa"},
+    "Corpo de Bombeiros": {"dias": 1095, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+avcb+bombeiros"}, # 3 anos comum em alguns lugares
+    "Conselho de Medicina (CRM)": {"dias": 365, "risco": "ALTO", "link": "https://portal.cfm.org.br/busca-medicos/"},
+    "Conselho de Enfermagem (COREN)": {"dias": 365, "risco": "ALTO", "link": "http://www.cofen.gov.br/"},
+    "Conselho de Farmácia (CRF)": {"dias": 365, "risco": "ALTO", "link": "https://www.cff.org.br/"},
+    "CNES": {"dias": 180, "risco": "CRÍTICO", "link": "https://cnes.datasus.gov.br/"},
+    "Licença Ambiental": {"dias": 1460, "risco": "MÉDIO", "link": "https://www.google.com/search?q=licenca+ambiental+consulta"}, # 4 anos
+    "Polícia Civil (Licença)": {"dias": 365, "risco": "ALTO", "link": "https://www.google.com/search?q=policia+civil+produtos+controlados"},
+    "Polícia Federal (Licença)": {"dias": 365, "risco": "ALTO", "link": "https://www.gov.br/pf/pt-br"},
+    "Licença de Publicidade": {"dias": 365, "risco": "NORMAL", "link": ""},
+}
+
+# Lista completa para o dropdown (mantendo a sua lista original)
+LISTA_TIPOS_DOCUMENTOS = sorted(list(set([
     "Licença de Publicidade", "Conselho de Medicina (CRM)", "Conselho de Farmácia (CRF)", "Licença Sanitária",
     "Conselho de Enfermagem (COREN)", "CNES", "Inscrição Municipal", "Licença Ambiental", "Alvará de Funcionamento",
     "Corpo de Bombeiros", "Polícia Civil (Termo de Vistoria)", "Polícia Civil (Licença)", "Conselho de Biomedicina (CRBM)",
@@ -78,8 +95,7 @@ LISTA_TIPOS_DOCUMENTOS = [
     "Licença Sanitária Serviço (Psicologia)", "Licença Sanitária Serviço (Procedimentos Cirúrgicos)", "Licença Sanitária Serviço (Consultório Isolado)",
     "Conselho de Medicina (CRM) Serviço (Emergência)", "Conselho de Medicina (CRM) Serviço (Pediatria)", "Conselho de Medicina (CRM) - Diálise",
     "Licença Sanitária Serviço (UTI Mista)", "Projeto Arquitetonico (Visa e Prefeitura)", "Habite-se", "SDR", "SMOP", "Alvará de Obra", "Outros"
-]
-LISTA_TIPOS_DOCUMENTOS = sorted(list(set(LISTA_TIPOS_DOCUMENTOS)))
+])))
 
 # --- AUTO-REFRESH ---
 components.html("""
@@ -90,7 +106,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES AUXILIARES ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -103,11 +119,20 @@ def safe_prog(val):
     try: return max(0, min(100, int(float(val))))
     except: return 0
 
-# --- NOVA FUNÇÃO INTELIGENTE: Remove acentos e padroniza ---
 def normalizar_texto(texto):
     if texto is None: return ""
-    # Converte para string, normaliza para remover acentos e põe em minúsculas
     return ''.join(c for c in unicodedata.normalize('NFKD', str(texto)) if unicodedata.category(c) != 'Mn').lower()
+
+# --- FUNÇÃO INTELIGENTE PARA APLICAR REGRAS ---
+def aplicar_inteligencia_doc(tipo_doc, data_base=None):
+    if not data_base: data_base = date.today()
+    info = DOC_INTELLIGENCE.get(tipo_doc, {"dias": 0, "risco": "NORMAL", "link": ""})
+    
+    novo_vencimento = data_base
+    if info["dias"] > 0:
+        novo_vencimento = data_base + timedelta(days=info["dias"])
+        
+    return info["risco"], novo_vencimento, info["link"]
 
 st.markdown("""
 <style>
@@ -335,7 +360,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v38.0 - Busca Inteligente")
+    st.caption("v39.0 - Sistema Inteligente")
 
 # --- ROBÔ INTELIGENTE V2 ---
 try:
@@ -406,7 +431,6 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # --- BUSCA INTELIGENTE PAINEL ---
     busca_painel = st.text_input("🔎 Buscar Unidade/Documento", placeholder="Ex: gravatai, crm, alvara...")
 
     f_atual = st.session_state['filtro_dash']
@@ -417,9 +441,7 @@ if menu == "Painel Geral":
         df_show = df_show[df_show['Status'] == f_atual]
         
     if busca_painel:
-        # Normaliza a busca
         termo = normalizar_texto(busca_painel)
-        # Filtra buscando em todas as colunas
         df_show = df_show[df_show.apply(lambda row: termo in normalizar_texto(str(row.values)), axis=1)]
         
     if not df_show.empty:
@@ -466,7 +488,6 @@ elif menu == "Gestão de Docs":
     if f_uni != "Todas": df_show = df_show[df_show['Unidade'] == f_uni]
     if f_stt: df_show = df_show[df_show['Status'].isin(f_stt)]
     
-    # --- BUSCA INTELIGENTE GESTÃO ---
     if f_txt:
         termo = normalizar_texto(f_txt)
         df_show = df_show[df_show.apply(lambda row: termo in normalizar_texto(str(row.values)), axis=1)]
@@ -494,11 +515,14 @@ elif menu == "Gestão de Docs":
                 n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.selectbox("Documento", options=LISTA_TIPOS_DOCUMENTOS); n_c = st.text_input("CNPJ")
                 if st.form_submit_button("ADICIONAR"):
                     if n_u and n_d and n_c:
-                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
+                        # APLICA INTELIGÊNCIA AO CRIAR
+                        risco_sug, venc_sug, link_sug = aplicar_inteligencia_doc(n_d)
+                        
+                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": venc_sug, "Status": risco_sug, "Progresso": 0, "Concluido": "False"}
                         df_temp = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
                         df_temp['ID_UNICO'] = df_temp['Unidade'] + " - " + df_temp['Documento']
                         update_dados_local(df_temp, df_checklist)
-                        st.toast("Documento criado! Não esqueça de Salvar na Nuvem.", icon="💾")
+                        st.toast(f"Criado! Risco definido como {risco_sug}.", icon="🧠")
                         st.rerun()
                     else:
                         st.error("Preencha Unidade, Documento e CNPJ para adicionar.")
@@ -573,7 +597,6 @@ elif menu == "Gestão de Docs":
                 idx = indices[0]
                 doc_nome = df_prazos.at[idx, 'Documento']
                 
-                # --- EDIÇÃO DO TIPO DO DOCUMENTO ---
                 c_tit, c_edit_btn = st.columns([4, 1])
                 
                 opcoes_docs = LISTA_TIPOS_DOCUMENTOS.copy()
@@ -590,17 +613,29 @@ elif menu == "Gestão de Docs":
                         antigo_id = doc_ativo_id
                         nova_unidade = df_prazos.at[idx, 'Unidade']
                         cnpj_atual = df_prazos.at[idx, 'CNPJ']
-                        novo_id = nova_unidade + " - " + cnpj_atual + " - " + novo_nome_doc
                         
+                        # --- APLICA INTELIGÊNCIA AO MUDAR O NOME ---
+                        risco_sug, venc_sug, link_sug = aplicar_inteligencia_doc(novo_nome_doc, df_prazos.at[idx, 'Data_Recebimento'])
+                        df_prazos.at[idx, 'Status'] = risco_sug
+                        df_prazos.at[idx, 'Vencimento'] = venc_sug
+                        
+                        # Atualiza IDs
+                        novo_id = nova_unidade + " - " + cnpj_atual + " - " + novo_nome_doc
                         df_prazos.at[idx, 'Documento'] = novo_nome_doc
                         df_prazos.at[idx, 'ID_UNICO'] = novo_id
                         df_checklist.loc[df_checklist['Documento_Ref'] == antigo_id, 'Documento_Ref'] = novo_id
                         
                         update_dados_local(df_prazos, df_checklist)
                         st.session_state['doc_focado_id'] = novo_id
+                        st.toast(f"Atualizado! Risco sugerido: {risco_sug}", icon="🧠")
                         st.rerun()
 
                 st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
+                
+                # --- LINK INTELIGENTE ---
+                _, _, link_inteligente = aplicar_inteligencia_doc(doc_nome)
+                if link_inteligente:
+                    st.link_button(f"🌎 Pesquisar {doc_nome} no Google", link_inteligente)
                 
                 c_del, _ = st.columns([1, 4])
                 if c_del.button("🗑️ Excluir"):
