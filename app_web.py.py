@@ -15,6 +15,7 @@ import pytz
 import io
 from streamlit_option_menu import option_menu 
 import openpyxl 
+import csv 
 
 # Tenta importar Plotly
 try:
@@ -103,11 +104,33 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
     except: return False
 
 # --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS (AUTÔNOMO) ---
-def processar_dados_importados(df_importado_raw):
-    """Mapeia o DataFrame importado (CSV/Excel) para o formato do df_prazos."""
-    df = df_importado_raw.copy()
+def processar_dados_importados(uploaded_file):
+    """Mapeia o DataFrame importado autonomamente e garante a leitura completa."""
+    df = pd.DataFrame()
     
-    # Normalização dos nomes das colunas
+    # 1. Leitura Robusta
+    if uploaded_file.name.endswith('.csv'):
+        uploaded_file.seek(0)
+        try:
+            df = pd.read_csv(uploaded_file, encoding='latin1', sep=';')
+        except:
+            uploaded_file.seek(0)
+            try:
+                df = pd.read_csv(uploaded_file, encoding='utf-8', sep=',')
+            except Exception as e:
+                 st.error(f"Erro de leitura de CSV: Tente salvar o arquivo como CSV com delimitador ponto-e-vírgula.")
+                 return pd.DataFrame()
+                 
+    elif uploaded_file.name.endswith(('.xlsx', '.xls')):
+        try:
+            df = pd.read_excel(uploaded_file, engine='openpyxl')
+        except Exception as e:
+            st.error(f"Erro de leitura de Excel: {e}")
+            return pd.DataFrame()
+
+    if df.empty: return pd.DataFrame()
+
+    # 2. Normalização dos nomes das colunas
     df.columns = [str(c).strip().replace('.', '').upper() for c in df.columns]
     
     # Mapeamento de Colunas (Candidatos)
@@ -162,10 +185,9 @@ def processar_dados_importados(df_importado_raw):
         if col in df_result.columns:
             df_final[col] = df_result[col]
         else:
-            df_final[col] = 'Não Informado' # Valor default se a coluna inteira faltar
+            df_final[col] = 'Não Informado'
             
     return df_final.copy()
-
 
 # --- FUNÇÕES DE CONEXÃO E SALVAMENTO ---
 
@@ -343,7 +365,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v36.0 - Final Bugfix")
+    st.caption("v36.0 - Estabilidade Final")
 
 # --- ROBÔ ---
 try:
@@ -480,8 +502,8 @@ elif menu == "Gestão de Docs":
                     if uploaded_file is not None:
                         try:
                             if uploaded_file.name.endswith('.csv'):
-                                try: df_novo_raw = pd.read_csv(uploaded_file, encoding='utf-8', sep=',')
-                                except: uploaded_file.seek(0); df_novo_raw = pd.read_csv(uploaded_file, encoding='latin1', sep=';')
+                                try: df_novo_raw = pd.read_csv(uploaded_file, encoding='latin1', sep=';')
+                                except: uploaded_file.seek(0); df_novo_raw = pd.read_csv(uploaded_file, encoding='utf-8', sep=',')
                             elif uploaded_file.name.endswith(('.xlsx', '.xls')):
                                 df_novo_raw = pd.read_excel(uploaded_file, engine='openpyxl')
                                 
