@@ -32,15 +32,6 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_GERAL = 120 
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ" 
 
-# --- LISTA MESTRA DE DOCUMENTOS (Para ser usada no Selectbox) ---
-# O usuário pode expandir essa lista na planilha Config_Docs
-DOCUMENTOS_BASE = [
-    "Licença de Publicidade", "Conselho de Medicina (CRM)", "Conselho de Farmácia (CRF)", "Licença Sanitária",
-    "Corpo de Bombeiros", "Alvará de Funcionamento", "CNES", "Inscrição Municipal", "Licença Ambiental",
-    "Polícia Civil (Termo de Vistoria)", "Polícia Federal (Licença)", "Projeto Arquitetonico (Visa e Prefeitura)",
-    "Habite-se", "SDR", "SMOP", "Alvará de Obra"
-]
-
 # --- AUTO-REFRESH ---
 components.html("""
 <script>
@@ -112,27 +103,27 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
-# --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS (AUTÔNOMO) ---
+# --- FUNÇÃO DE PROCESSAMENTO DE DADOS IMPORTADOS (AUTÔNOMO E ROBUSTO) ---
 def processar_dados_importados(uploaded_file):
-    """Mapeia o DataFrame importado autonomamente."""
-    df = pd.DataFrame()
+    """Mapeia o DataFrame importado autonomamente e garante a leitura completa."""
     
-    # 1. Leitura Robusta
+    # 1. Leitura Robusta (Usando buffer para evitar erro de arquivo)
+    bytes_data = uploaded_file.getvalue()
+    
     if uploaded_file.name.endswith('.csv'):
-        uploaded_file.seek(0)
-        try:
-            df = pd.read_csv(uploaded_file, encoding='latin1', sep=';')
+        # Tenta ler com diferentes delimitadores para maior robustez
+        try: # Tenta ponto e vírgula (BR)
+            df = pd.read_csv(io.BytesIO(bytes_data), encoding='latin1', sep=';')
         except:
-            uploaded_file.seek(0)
-            try:
-                df = pd.read_csv(uploaded_file, encoding='utf-8', sep=',')
+            try: # Tenta vírgula (US/padrão)
+                df = pd.read_csv(io.BytesIO(bytes_data), encoding='utf-8', sep=',')
             except Exception as e:
-                 st.error(f"Erro de leitura de CSV: Tente salvar o arquivo como CSV com delimitador ponto-e-vírgula.")
+                 st.error(f"Erro de leitura de CSV: Verifique se o arquivo está bem formatado.")
                  return pd.DataFrame()
                  
     elif uploaded_file.name.endswith(('.xlsx', '.xls')):
         try:
-            df = pd.read_excel(uploaded_file, engine='openpyxl')
+            df = pd.read_excel(io.BytesIO(bytes_data), engine='openpyxl')
         except Exception as e:
             st.error(f"Erro de leitura de Excel: {e}")
             return pd.DataFrame()
@@ -168,7 +159,7 @@ def processar_dados_importados(uploaded_file):
         else:
             df_result[col_final] = val
             
-    # Limpeza de Documento (Pega o melhor nome)
+    # Limpeza de Documento
     doc_base = df_result.get('Documento', pd.Series([''] * len(df_result)))
     df_result['Documento'] = doc_base.apply(lambda x: x if x else 'Não Definido')
 
@@ -374,7 +365,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v35.0 - Estabilidade Final")
+    st.caption("v36.0 - Import Final")
 
 # --- ROBÔ ---
 try:
