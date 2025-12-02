@@ -10,6 +10,7 @@ import base64
 import requests
 import streamlit.components.v1 as components
 import pytz
+import os # Importante para lidar com arquivos
 
 # --- 1. CONFIGURAÇÃO GERAL ---
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
@@ -26,7 +27,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES ---
+# --- FUNÇÕES VISUAIS ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -49,6 +50,8 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# --- 2. CONEXÃO E DADOS ---
 
 def conectar_gsheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -88,7 +91,6 @@ def sincronizar_prazos_completo(df_novo):
         ws = sh.worksheet("Prazos")
         ws.clear()
         
-        # Remove a coluna 'Prazo' (texto) antes de salvar, pois ela é calculada
         df_salvar = df_novo.copy()
         if 'Prazo' in df_salvar.columns:
             df_salvar = df_salvar.drop(columns=['Prazo'])
@@ -121,28 +123,21 @@ def carregar_dados_prazos():
         dados = ws.get_all_records()
         df = pd.DataFrame(dados)
         
-        # Garante colunas mínimas
         for col in ["Documento", "Vencimento", "Status", "Concluido"]:
             if col not in df.columns: df[col] = ""
 
-        # --- CORREÇÃO DE DATA ---
         df['Vencimento'] = pd.to_datetime(df['Vencimento'], dayfirst=True, errors='coerce').dt.date
         df['Concluido'] = df['Concluido'].astype(str).str.upper() == 'TRUE'
-        
         return df
     except:
         return pd.DataFrame(columns=["Documento", "Vencimento", "Status", "Concluido"])
 
 def calcular_status_e_texto(data_venc, concluido):
-    # Retorna (Dias, Status, Texto_Bonito)
     if concluido: return 999, "✅ RESOLVIDO", "---"
     if pd.isnull(data_venc): return 0, "⚪ DATA INVÁLIDA", "---"
     
     hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).date()
     dias = (data_venc - hoje).days
-    
-    txt = ""
-    status = ""
     
     if dias < 0:
         status = "⛔ ATRASADO"
@@ -159,29 +154,61 @@ def calcular_status_e_texto(data_venc, concluido):
     else:
         status = "🟢 NORMAL"
         txt = f"📅 {dias} dias restantes"
-        
     return dias, status, txt
 
+# --- PDF GENERATOR CORRIGIDO ---
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 12)
         self.cell(0, 10, 'Relatorio LegalizaHealth', 0, 1, 'C')
         self.ln(5)
+
 def limpar_txt(t):
     return str(t).replace("✅","").replace("❌","").encode('latin-1','replace').decode('latin-1')
+
 def gerar_pdf(vistorias):
     pdf = PDF()
     pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
     for i, item in enumerate(vistorias):
-        pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 10, f"Item {i+1}: {limpar_txt(item['Item'])}", 0, 1)
-        pdf.set_font("Arial", size=10)
-        pdf.multi_cell(0, 6, f"Local: {limpar_txt(item['Setor'])}\nObs: {limpar_txt(item['Obs'])}")
+        # Título do Item
+        pdf.set_font("Arial", 'B', 14)
+        pdf.cell(0, 10, f"Item #{i+1}: {limpar_txt(item['Item'])}", 0, 1)
+        
+        # Detalhes
+        pdf.set_font("Arial", size=11)
+        pdf.cell(0, 7, f"Setor: {limpar_txt(item['Setor'])}", 0, 1)
+        pdf.cell(0, 7, f"Situacao: {limpar_txt(item['Situação'])} | Gravidade: {limpar_txt(item['Gravidade'])}", 0, 1)
+        
+        # Observação (Bloco separado para não quebrar)
+        pdf.set_font("Arial", 'I', 11)
+        pdf.multi_cell(0, 7, f"Obs: {limpar_txt(item['Obs'])}")
+        pdf.ln(2)
+
+        # FOTO (Correção aqui)
         if item['Foto_Binaria']:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
-                t.write(item['Foto_Binaria'].getbuffer())
-                pdf.image(t.name, w=60)
+            try:
+                # 1. Cria arquivo temporário no disco
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+                    # 2. Escreve os bytes da foto nele
+                    temp_file.write(item['Foto_Binaria'].getvalue())
+                    temp_file_path = temp_file.name
+                
+                # 3. PDF lê do arquivo físico
+                # x=10 (margem esq), w=80 (largura boa)
+                pdf.image(temp_file_path, x=10, w=80) 
+                pdf.ln(5)
+                
+                # 4. (Opcional) Limpeza do arquivo temp, mas o linux limpa depois
+                # os.unlink(temp_file_path) 
+            except Exception as e:
+                pdf.set_font("Arial", "I", 8)
+                pdf.cell(0, 10, f"[Erro ao processar imagem: {str(e)}]", 0, 1)
+        
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y()) # Linha divisória
         pdf.ln(5)
+
     return bytes(pdf.output(dest='S'))
 
 # --- INTERFACE ---
@@ -195,29 +222,26 @@ with st.sidebar:
     menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Prazos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
-# --- LÓGICA CENTRAL DE DADOS (Executa sempre) ---
-# Aqui recalculamos tudo para garantir que todas as telas vejam os dados certos
-df_global = carregar_dados_prazos()
-df_global['Prazo'] = "" # Cria coluna vazia
-
-criticos_lista = []
-atencao_lista = []
-
-for index, row in df_global.iterrows():
-    d, s, t = calcular_status_e_texto(row['Vencimento'], row['Concluido'])
-    df_global.at[index, 'Status'] = s
-    df_global.at[index, 'Prazo'] = t
-    
-    if not row['Concluido']:
-        if isinstance(s, str) and ("CRÍTICO" in s or "ATRASADO" in s or "HOJE" in s):
-            criticos_lista.append({"doc": row['Documento'], "status": s.replace("🔴 ", "").replace("⛔ ", "")})
-        if isinstance(s, str) and "ALTO" in s:
-            atencao_lista.append(row)
-
 # --- ROBÔ ---
 try:
     agora = datetime.now()
     diff = (agora - st.session_state['ultima_notificacao']).total_seconds() / 60
+    
+    # Lógica de Dados Global
+    df_global = carregar_dados_prazos()
+    df_global['Prazo'] = ""
+    criticos_lista = []
+    
+    for index, row in df_global.iterrows():
+        d, s, t = calcular_status_e_texto(row['Vencimento'], row['Concluido'])
+        df_global.at[index, 'Status'] = s
+        df_global.at[index, 'Prazo'] = t
+        
+        if not row['Concluido']:
+            if isinstance(s, str) and ("CRÍTICO" in s or "ATRASADO" in s or "HOJE" in s or "ALTO" in s):
+                clean_s = s.replace("🔴 ", "").replace("⛔ ", "").replace("💥 ", "")
+                criticos_lista.append({"doc": row['Documento'], "status": clean_s})
+
     if diff >= INTERVALO_GERAL and len(criticos_lista) > 0:
         if enviar_resumo_push(criticos_lista):
             st.session_state['ultima_notificacao'] = agora
@@ -228,21 +252,22 @@ except Exception as e: print(f"Erro robô: {e}")
 if menu == "📊 Dashboard":
     st.title("Painel de Controle")
     
-    # Filtra os DataFrames para exibição
-    n_crit = len(criticos_lista)
-    n_atencao = len(atencao_lista)
+    # Filtros
+    is_risk = lambda row: not row['Concluido'] and ("CRÍTICO" in row['Status'] or "ATRASADO" in row['Status'] or "HOJE" in row['Status'])
+    is_high = lambda row: not row['Concluido'] and "ALTO" in row['Status']
+    
+    df_criticos = df_global[df_global.apply(is_risk, axis=1)]
+    df_atencao = df_global[df_global.apply(is_high, axis=1)]
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("🚨 Risco Imediato", n_crit, delta="Ação" if n_crit > 0 else "OK", delta_color="inverse")
-    col2.metric("🟠 Prioridade Alta", n_atencao, delta_color="off")
+    col1.metric("🚨 Risco Imediato", len(df_criticos), delta="Ação" if len(df_criticos) > 0 else "OK", delta_color="inverse")
+    col2.metric("🟠 Prioridade Alta", len(df_atencao), delta_color="off")
     col3.metric("📋 Total", len(df_global))
     st.markdown("---")
     
-    if n_crit > 0:
-        st.error(f"⚠️ Atenção! {n_crit} documentos requerem sua ação.")
-        # Filtra o DF global para mostrar só os criticos e não concluidos
-        df_show = df_global[ (df_global['Status'].str.contains("CRÍTICO|ATRASADO|HOJE")) & (df_global['Concluido'] == False) ]
-        st.dataframe(df_show[['Documento', 'Vencimento', 'Prazo', 'Status']], use_container_width=True, hide_index=True)
+    if len(df_criticos) > 0:
+        st.error(f"⚠️ Atenção! {len(df_criticos)} documentos requerem sua ação.")
+        st.dataframe(df_criticos[['Documento', 'Vencimento', 'Prazo', 'Status']], use_container_width=True, hide_index=True)
     else:
         st.success("Tudo tranquilo.")
 
@@ -250,7 +275,6 @@ elif menu == "📅 Gestão de Prazos":
     st.title("Gestão de Documentos")
     st.caption("Data: DD/MM/AAAA. Coluna 'Prazo' é calculada automaticamente.")
     
-    # Aqui usamos o df_global que JÁ TEM o texto calculado
     df_alterado = st.data_editor(
         df_global,
         num_rows="dynamic",
@@ -259,7 +283,7 @@ elif menu == "📅 Gestão de Prazos":
         column_config={
             "Concluido": st.column_config.CheckboxColumn("✅ Feito?", default=False),
             "Status": st.column_config.TextColumn("Status", disabled=True),
-            "Prazo": st.column_config.TextColumn("Prazo Estimado", disabled=True), # Agora aparece preenchido!
+            "Prazo": st.column_config.TextColumn("Prazo Estimado", disabled=True),
             "Vencimento": st.column_config.DateColumn("Vencimento", format="DD/MM/YYYY", step=1),
             "Documento": st.column_config.TextColumn("Nome", width="large"),
         },
@@ -267,7 +291,6 @@ elif menu == "📅 Gestão de Prazos":
     )
 
     if st.button("💾 SALVAR E ATUALIZAR", type="primary", use_container_width=True):
-        # Sincroniza (a função remove a coluna Prazo sozinha)
         if sincronizar_prazos_completo(df_alterado):
             st.success("Atualizado! Recarregando...")
             time.sleep(1)
