@@ -30,12 +30,12 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_GERAL = 120
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
-# --- AUTO-REFRESH (Mantido para robô, mas cuidado com edições não salvas) ---
+# --- AUTO-REFRESH ---
 components.html("""
 <script>
     setTimeout(function(){
         window.location.reload(1);
-    }, 300000); // Aumentei para 5 min para evitar perder edição no meio
+    }, 300000); 
 </script>
 """, height=0)
 
@@ -67,8 +67,6 @@ st.markdown("""
     }
     .stProgress > div > div > div > div { background-color: #00c853; }
     [data-testid="stDataFrame"] { width: 100%; }
-    
-    /* Destaque para o botão de salvar */
     div[data-testid="stButton"] > button[kind="primary"] {
         border: 2px solid #00e676;
         box-shadow: 0 0 10px rgba(0, 230, 118, 0.5);
@@ -107,7 +105,6 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
-# Cache para leitura inicial
 @st.cache_data(ttl=INTERVALO_GERAL)
 def carregar_tudo_inicial():
     try:
@@ -147,14 +144,12 @@ def carregar_tudo_inicial():
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame()
 
-# Função para gerenciar o estado local vs nuvem
 def get_dados():
     if 'dados_cache' not in st.session_state or st.session_state['dados_cache'] is None:
         st.session_state['dados_cache'] = carregar_tudo_inicial()
     return st.session_state['dados_cache']
 
 def update_dados_local(df_p, df_c):
-    # Atualiza o cache local para que o st.rerun() pegue os dados novos
     st.session_state['dados_cache'] = (df_p, df_c)
 
 def salvar_alteracoes_completo(df_prazos, df_checklist):
@@ -188,8 +183,8 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_c['Feito'] = df_c['Feito'].astype(str)
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
         
-        st.cache_data.clear() # Limpa o cache global
-        st.session_state['dados_cache'] = (df_prazos, df_checklist) # Atualiza sessão
+        st.cache_data.clear()
+        st.session_state['dados_cache'] = (df_prazos, df_checklist)
         st.toast("✅ Dados Sincronizados com a Nuvem!", icon="☁️")
         return True
     except Exception as e:
@@ -290,13 +285,12 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v33.0 - Otimização Total (Edição Local)")
+    st.caption("v33.1 - Correção Duplo Clique")
 
-# --- ROBÔ (Usa dados locais para não travar) ---
+# --- ROBÔ ---
 try:
     agora = datetime.now()
     diff = (agora - st.session_state['ultima_notificacao']).total_seconds() / 60
-    # Carrega do cache local
     df_alertas = get_dados()[0]
     
     if df_alertas is not None and diff >= INTERVALO_GERAL:
@@ -321,7 +315,7 @@ except: pass
 
 if menu == "Painel Geral":
     st.title("Painel de Controle Estratégico")
-    df_p, _ = get_dados() # Leitura local instantânea
+    df_p, _ = get_dados()
     
     if df_p.empty:
         st.warning("Ainda não há documentos cadastrados. Adicione na aba 'Gestão de Docs'.")
@@ -331,8 +325,6 @@ if menu == "Painel Geral":
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
     
-    # LAYOUT MOBILE: KPIs empilhados, Tabela e Gráfico empilhados.
-    
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
@@ -341,7 +333,6 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # 1. TABELA DE ALERTA
     f_atual = st.session_state['filtro_dash']
     st.subheader(f"Lista de Processos: {f_atual}")
     df_show = df_p.copy()
@@ -364,7 +355,6 @@ if menu == "Painel Geral":
 
     st.markdown("---")
     
-    # 2. GRÁFICO
     st.subheader("Panorama")
     if not df_p.empty and TEM_PLOTLY:
         status_counts = df_p['Status'].value_counts()
@@ -379,7 +369,7 @@ if menu == "Painel Geral":
 
 elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
-    df_prazos, df_checklist = get_dados() # Dados locais
+    df_prazos, df_checklist = get_dados()
     
     with st.expander("🔍 FILTROS", expanded=True):
         f1, f2, f3 = st.columns(3)
@@ -394,7 +384,6 @@ elif menu == "Gestão de Docs":
     if f_stt: df_show = df_show[df_show['Status'].isin(f_stt)]
     if f_txt: df_show = df_show[df_show.astype(str).apply(lambda x: x.str.contains(f_txt, case=False)).any(axis=1)]
 
-    # --- CRIAÇÃO DAS COLUNAS ---
     col_l, col_d = st.columns([1.2, 2])
 
     with col_l:
@@ -419,7 +408,6 @@ elif menu == "Gestão de Docs":
                 if st.form_submit_button("ADICIONAR"):
                     if n_u and n_d and n_c:
                         novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
-                        # ADICIONA LOCALMENTE
                         df_temp = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
                         df_temp['ID_UNICO'] = df_temp['Unidade'] + " - " + df_temp['Documento']
                         update_dados_local(df_temp, df_checklist)
@@ -428,7 +416,6 @@ elif menu == "Gestão de Docs":
                     else:
                         st.error("Preencha Unidade, Documento e CNPJ para adicionar.")
 
-        # BLOCO DE IMPORTAÇÃO
         st.markdown("---")
         with st.expander("⬆️ Importar Unidades/CNPJ (Excel/CSV)"):
             import_file = st.file_uploader("Carregar arquivo (.xlsx ou .csv)", type=['xlsx', 'csv'], key="uploader_import_mass")
@@ -469,7 +456,6 @@ elif menu == "Gestão de Docs":
                                 df_combinado = pd.concat([df_prazos, df_import], ignore_index=True)
                                 df_combinado = df_combinado.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
                                 
-                                # Salva na nuvem direto na importação pois é um lote grande
                                 salvar_alteracoes_completo(df_combinado, df_checklist)
                                 st.success(f"✅ {len(df_import)} importados!")
                                 st.balloons()
@@ -486,7 +472,6 @@ elif menu == "Gestão de Docs":
                 idx = indices[0]
                 doc_nome = df_prazos.at[idx, 'Documento']
                 
-                # --- EDIÇÃO DO NOME DO DOCUMENTO (LOCAL) ---
                 c_tit, c_edit_btn = st.columns([4, 1])
                 novo_nome_doc = c_tit.text_input("Nome do Documento", value=doc_nome, key=f"nome_doc_{doc_ativo_id}")
                 
@@ -549,7 +534,6 @@ elif menu == "Gestão de Docs":
                         update_dados_local(df_prazos, df_checklist)
                     
                     prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
-                    # Placeholders para atualização visual
                     prog_bar_placeholder = st.empty()
                     prog_bar_placeholder.progress(prog_atual, text=f"Progressão: {prog_atual}%")
 
@@ -564,7 +548,6 @@ elif menu == "Gestão de Docs":
                 c_add, c_btn = st.columns([3, 1])
                 new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
                 
-                # ADICIONAR TAREFA (LOCALMENTE)
                 if c_btn.button("ADICIONAR", key=f"btn_add_{doc_ativo_id}"):
                     if new_t:
                         line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
@@ -586,25 +569,25 @@ elif menu == "Gestão de Docs":
                         key=f"ed_{doc_ativo_id}"
                     )
                     
-                    # CÁLCULO INSTANTANEO
                     tot = len(edited)
                     done = edited['Feito'].sum()
                     new_p = int((done/tot)*100) if tot > 0 else 0
                     
-                    if new_p != prog_atual:
-                        df_prazos.at[idx, 'Progresso'] = new_p
-                        prog_bar_placeholder.progress(new_p, text=f"Progressão: {new_p}%")
+                    # 1. Atualiza visual imediatamente
+                    prog_bar_placeholder.progress(new_p, text=f"Progressão: {new_p}%")
                     
-                    if not edited.equals(df_t):
+                    # 2. Atualiza dados locais (se mudou algo)
+                    if not edited.equals(df_t) or new_p != prog_atual:
+                        df_prazos.at[idx, 'Progresso'] = new_p
+                        
                         df_checklist = df_checklist[~mask]
                         edited['Documento_Ref'] = str(doc_ativo_id)
                         df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
-                        update_dados_local(df_prazos, df_checklist) # Atualiza memoria
+                        update_dados_local(df_prazos, df_checklist)
 
                 else: st.info("Adicione tarefas acima.")
 
                 st.markdown("---")
-                # BOTÃO SALVAR AGORA É O UNICO QUE VAI PRA NUVEM
                 if st.button("💾 SALVAR TUDO NA NUVEM", type="primary"):
                     if salvar_alteracoes_completo(df_prazos, df_checklist): time.sleep(0.5); st.rerun()
             else:
