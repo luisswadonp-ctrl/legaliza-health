@@ -3,9 +3,10 @@ pandas
 fpdf2
 gspread
 oauth2client
+google-api-python-client
 requests
 pytz
-google-api-python-client
+plotly
 
 
 
