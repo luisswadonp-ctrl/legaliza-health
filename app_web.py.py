@@ -7,13 +7,13 @@ import tempfile
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+from googleapapiclient.http import MediaIoBaseUpload
 import base64
 import requests
 import streamlit.components.v1 as components
 import pytz
 import io
-from streamlit_option_menu import option_menu 
+from streamlit_option_menu import option_menu
 
 # Tenta importar Plotly
 try:
@@ -27,8 +27,8 @@ except ImportError:
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
 
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
-INTERVALO_GERAL = 120 
-ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ" 
+INTERVALO_GERAL = 120
+ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
 # --- AUTO-REFRESH ---
 components.html("""
@@ -101,6 +101,7 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
+@st.cache_data(ttl=INTERVALO_GERAL) # Adicionado cache para performance
 def carregar_tudo():
     try:
         sh = conectar_gsheets()
@@ -142,6 +143,8 @@ def carregar_tudo():
 def salvar_alteracoes_completo(df_prazos, df_checklist):
     try:
         sh = conectar_gsheets()
+        
+        # 1. Salvar df_prazos
         ws_prazos = sh.worksheet("Prazos")
         ws_prazos.clear()
         df_p = df_prazos.copy()
@@ -161,12 +164,14 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
 
         ws_prazos.update([df_p.columns.values.tolist()] + df_p.values.tolist())
         
+        # 2. Salvar df_checklist
         ws_check = sh.worksheet("Checklist_Itens")
         ws_check.clear()
         df_c = df_checklist.copy()
         df_c['Feito'] = df_c['Feito'].astype(str)
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
         
+        st.cache_data.clear() # Limpa o cache após salvar
         st.toast("✅ Salvo!", icon="☁️")
         return True
     except Exception as e:
@@ -274,14 +279,15 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v32.0 - Progressão Final")
+    st.caption("v32.1 - Importação Excel/CSV")
 
 # --- ROBÔ ---
 try:
     agora = datetime.now()
     diff = (agora - st.session_state['ultima_notificacao']).total_seconds() / 60
-    df_alertas = st.session_state.get('dados_cache', [None])[0]
-    if df_alertas is None and diff >= INTERVALO_GERAL: df_alertas, _ = carregar_tudo()
+    # Usa a versão em cache para evitar leituras excessivas
+    df_alertas = carregar_tudo()[0] if diff >= INTERVALO_GERAL else st.session_state.get('dados_cache', [None])[0]
+    
     if df_alertas is not None and diff >= INTERVALO_GERAL:
         lista_alerta = []
         hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).date()
@@ -304,8 +310,7 @@ except: pass
 
 if menu == "Painel Geral":
     st.title("Painel de Controle Estratégico")
-    if 'dados_cache' in st.session_state: df_p = st.session_state['dados_cache'][0]
-    else: df_p, _ = carregar_tudo()
+    df_p, _ = carregar_tudo() # Usa a função em cache
     
     if df_p.empty:
         st.warning("Ainda não há documentos cadastrados. Adicione na aba 'Gestão de Docs'.")
@@ -353,7 +358,7 @@ if menu == "Painel Geral":
     if not df_p.empty and TEM_PLOTLY:
         status_counts = df_p['Status'].value_counts()
         fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
-            color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
+             color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
         fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
         st.plotly_chart(fig, use_container_width=True)
         
@@ -363,8 +368,7 @@ if menu == "Painel Geral":
 
 elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
-    if 'dados_cache' not in st.session_state: st.session_state['dados_cache'] = carregar_tudo()
-    df_prazos, df_checklist = st.session_state['dados_cache']
+    df_prazos, df_checklist = carregar_tudo() # Usa a função em cache
     
     with st.expander("🔍 FILTROS", expanded=True):
         f1, f2, f3 = st.columns(3)
@@ -400,115 +404,174 @@ elif menu == "Gestão de Docs":
             with st.form("new_doc", clear_on_submit=True):
                 n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.text_input("Documento"); n_c = st.text_input("CNPJ")
                 if st.form_submit_button("ADICIONAR"):
-                    if n_d:
+                    if n_u and n_d and n_c:
                         novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": date.today(), "Status": "NORMAL", "Progresso": 0, "Concluido": "False"}
+                        # Adiciona o novo documento ao dataframe existente
                         df_prazos = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
                         df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
                         salvar_alteracoes_completo(df_prazos, df_checklist)
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
                         st.rerun()
+                    else:
+                        st.error("Preencha Unidade, Documento e CNPJ para adicionar.")
 
-    with col_d:
-        if doc_ativo_id:
-            indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
+        # NOVO BLOCO DE IMPORTAÇÃO EM MASSA
+        st.markdown("---")
+        with st.expander("⬆️ Importar em Massa (Excel/CSV)"):
+            import_file = st.file_uploader("Carregar arquivo (.xlsx ou .csv)", type=['xlsx', 'csv'], key="uploader_import_mass")
             
-            if not indices.empty:
-                idx = indices[0]
-                doc_nome = df_prazos.at[idx, 'Documento']
-                
-                st.subheader(f"📝 {doc_nome}")
-                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
-                
-                c_del, _ = st.columns([1, 4])
-                if c_del.button("🗑️ Excluir"):
-                    df_prazos = df_prazos.drop(idx).reset_index(drop=True)
-                    df_checklist = df_checklist[df_checklist['Documento_Ref'] != doc_ativo_id]
-                    salvar_alteracoes_completo(df_prazos, df_checklist)
-                    st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                    st.session_state['doc_focado_id'] = None
-                    st.rerun()
+            if import_file:
+                # 1. Leitura do Arquivo e Tratamento
+                try:
+                    # Tenta ler como Excel, se falhar tenta CSV
+                    try:
+                        df_novo = pd.read_excel(import_file)
+                    except:
+                        df_novo = pd.read_csv(import_file, encoding='utf-8')
+                    
+                    # 2. Normalização e Preenchimento de Colunas Faltantes
+                    colunas_base = ['Unidade', 'Setor', 'Documento', 'CNPJ']
+                    for col in colunas_base:
+                        if col not in df_novo.columns:
+                            df_novo[col] = ""
+                    
+                    # Seleciona apenas as colunas relevantes para o cadastro
+                    df_novo = df_novo[colunas_base].astype(str)
+                    
+                    # 3. Preenchimento dos Valores Padrão (Default)
+                    hoje = date.today()
+                    df_novo['Data_Recebimento'] = hoje
+                    df_novo['Vencimento'] = hoje
+                    df_novo['Status'] = "NORMAL"
+                    df_novo['Progresso'] = 0
+                    df_novo['Concluido'] = "False"
+                    
+                    # Limpeza mínima: remove linhas sem nome de documento
+                    df_novo = df_novo[df_novo['Documento'].astype(str).str.strip() != ""]
 
-                with st.container(border=True):
-                    c1, c2, c3 = st.columns(3)
-                    
-                    st_curr = df_prazos.at[idx, 'Status']
-                    opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
-                    if st_curr not in opcoes: st_curr = "NORMAL"
+                    if st.button(f"Integrar {len(df_novo)} Documentos e Salvar na Nuvem", type="primary"):
+                        if df_novo.empty:
+                            st.warning("O arquivo não contém dados válidos ou a coluna 'Documento' está vazia.")
+                        else:
+                            # 4. Integração no DataFrame Principal
+                            df_novo['ID_UNICO'] = df_novo['Unidade'].astype(str) + " - " + df_novo['Documento'].astype(str)
+                            
+                            # Junta com o DataFrame existente e remove duplicatas (mantém a última, que é a importada)
+                            global df_prazos
+                            df_prazos = pd.concat([df_prazos, df_novo], ignore_index=True)
+                            df_prazos = df_prazos.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
+                            
+                            # 5. Salva na Nuvem e Atualiza a Interface
+                            salvar_alteracoes_completo(df_prazos, df_checklist)
+                            st.success(f"✅ {len(df_novo)} documentos importados e salvos!")
+                            st.balloons()
+                            time.sleep(1)
+                            st.rerun()
 
-                    novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
-                    
-                    cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
-                    c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; color: white;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
-                    
-                    # Edição de Setor
-                    novo_setor = st.text_input("Editar Setor", value=df_prazos.at[idx, 'Setor'], key=f"edit_sector_{doc_ativo_id}")
-                    
-                    try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
-                    except: d_rec = date.today()
-                    df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key=f"dt_rec_{doc_ativo_id}")
-                    
-                    try: d_venc = pd.to_datetime(df_prazos.at[idx, 'Vencimento'], dayfirst=True).date()
-                    except: d_venc = date.today()
-                    df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key=f"dt_venc_{doc_ativo_id}")
-                    
-                    # ATUALIZA MEMORIA
-                    df_prazos.at[idx, 'Status'] = novo_risco
-                    df_prazos.at[idx, 'Setor'] = novo_setor
-                    
-                    prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
-                    # PROGRESSÃO
-                    st.progress(prog_atual, text=f"Progressão: {prog_atual}%")
-
-                st.write("✅ **Tarefas**")
-                df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
-                df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
-                mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
-                df_t = df_checklist[mask].copy().reset_index(drop=True)
+                except Exception as e:
+                    st.error(f"Erro ao processar o arquivo. Verifique se as colunas estão corretas (Unidade, Setor, Documento, CNPJ são esperadas). Detalhe: {e}")
+        # FIM NOVO BLOCO DE IMPORTAÇÃO EM MASSA
+        
+        with col_d:
+            if doc_ativo_id:
+                indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
                 
-                c_add, c_btn = st.columns([3, 1])
-                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
-                if c_btn.button("ADICIONAR", key=f"btn_add_{doc_ativo_id}"):
-                    if new_t:
-                        line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
-                        df_checklist = pd.concat([df_checklist, line], ignore_index=True)
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                if not indices.empty:
+                    idx = indices[0]
+                    doc_nome = df_prazos.at[idx, 'Documento']
+                    
+                    st.subheader(f"📝 {doc_nome}")
+                    st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
+                    
+                    c_del, _ = st.columns([1, 4])
+                    if c_del.button("🗑️ Excluir"):
+                        df_prazos = df_prazos.drop(idx).reset_index(drop=True)
+                        df_checklist = df_checklist[df_checklist['Documento_Ref'] != doc_ativo_id]
+                        salvar_alteracoes_completo(df_prazos, df_checklist)
+                        st.session_state['doc_focado_id'] = None
                         st.rerun()
 
-                if not df_t.empty:
-                    edited = st.data_editor(
-                        df_t, 
-                        num_rows="dynamic", 
-                        use_container_width=True, 
-                        hide_index=True,
-                        column_config={
-                            "Documento_Ref": None,
-                            "Tarefa": st.column_config.TextColumn("Descrição", width="medium"),
-                            "Feito": st.column_config.CheckboxColumn("OK", width="small")
-                        },
-                        key=f"ed_{doc_ativo_id}"
-                    )
-                    
-                    tot = len(edited); done = edited['Feito'].sum(); new_p = int((done/tot)*100) if tot > 0 else 0
-                    
-                    if new_p != prog_atual:
-                        df_prazos.at[idx, 'Progresso'] = new_p
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                    
-                    if not edited.equals(df_t):
-                        df_checklist = df_checklist[~mask]
-                        edited['Documento_Ref'] = str(doc_ativo_id)
-                        df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                        if new_p != prog_atual: st.rerun()
-                else: st.info("Adicione tarefas acima.")
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns(3)
+                        
+                        st_curr = df_prazos.at[idx, 'Status']
+                        opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
+                        if st_curr not in opcoes: st_curr = "NORMAL"
 
-                st.markdown("---")
-                if st.button("💾 SALVAR TUDO NA NUVEM", type="primary"):
-                    if salvar_alteracoes_completo(df_prazos, df_checklist): time.sleep(0.5); st.rerun()
-            else:
-                st.warning("Documento não encontrado.")
-                if st.button("Voltar"): st.session_state['doc_focado_id'] = None; st.rerun()
-        else: st.info("👈 Selecione um documento na lista.")
+                        novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
+                        
+                        cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
+                        c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; color: white;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
+                        
+                        # Edição de Setor
+                        novo_setor = st.text_input("Editar Setor", value=df_prazos.at[idx, 'Setor'], key=f"edit_sector_{doc_ativo_id}")
+                        
+                        try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
+                        except: d_rec = date.today()
+                        df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key=f"dt_rec_{doc_ativo_id}")
+                        
+                        try: d_venc = pd.to_datetime(df_prazos.at[idx, 'Vencimento'], dayfirst=True).date()
+                        except: d_venc = date.today()
+                        df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key=f"dt_venc_{doc_ativo_id}")
+                        
+                        # ATUALIZA MEMORIA
+                        df_prazos.at[idx, 'Status'] = novo_risco
+                        df_prazos.at[idx, 'Setor'] = novo_setor
+                        
+                        prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
+                        # PROGRESSÃO
+                        st.progress(prog_atual, text=f"Progressão: {prog_atual}%")
+
+                    st.write("✅ **Tarefas**")
+                    df_checklist['Feito'] = df_checklist['Feito'].astype(str).str.upper() == 'TRUE'
+                    df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
+                    mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
+                    df_t = df_checklist[mask].copy().reset_index(drop=True)
+                    
+                    c_add, c_btn = st.columns([3, 1])
+                    new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
+                    if c_btn.button("ADICIONAR", key=f"btn_add_{doc_ativo_id}"):
+                        if new_t:
+                            line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
+                            df_checklist = pd.concat([df_checklist, line], ignore_index=True)
+                            salvar_alteracoes_completo(df_prazos, df_checklist)
+                            st.rerun()
+
+                    if not df_t.empty:
+                        edited = st.data_editor(
+                            df_t, 
+                            num_rows="dynamic", 
+                            use_container_width=True, 
+                            hide_index=True,
+                            column_config={
+                                "Documento_Ref": None,
+                                "Tarefa": st.column_config.TextColumn("Descrição", width="medium"),
+                                "Feito": st.column_config.CheckboxColumn("OK", width="small")
+                            },
+                            key=f"ed_{doc_ativo_id}"
+                        )
+                        
+                        # CALCULA E ATUALIZA PROGRESSO
+                        tot = len(edited); done = edited['Feito'].sum(); new_p = int((done/tot)*100) if tot > 0 else 0
+                        
+                        if new_p != prog_atual:
+                            df_prazos.at[idx, 'Progresso'] = new_p
+                        
+                        if not edited.equals(df_t):
+                            df_checklist = df_checklist[~mask]
+                            edited['Documento_Ref'] = str(doc_ativo_id)
+                            df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
+                            
+                            if new_p != prog_atual: st.rerun() # Rerun para atualizar a barra de progresso
+
+                    else: st.info("Adicione tarefas acima.")
+
+                    st.markdown("---")
+                    if st.button("💾 SALVAR TUDO NA NUVEM", type="primary"):
+                        if salvar_alteracoes_completo(df_prazos, df_checklist): time.sleep(0.5); st.rerun()
+                else:
+                    st.warning("Documento não encontrado.")
+                    if st.button("Voltar"): st.session_state['doc_focado_id'] = None; st.rerun()
+            else: st.info("👈 Selecione um documento na lista.")
 
 elif menu == "Vistoria Mobile":
     st.title("Auditoria Mobile")
@@ -552,67 +615,3 @@ elif menu == "Relatórios":
                     pdf = gerar_pdf(df_f.to_dict('records'))
                     st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
         except: st.error("Sem histórico.")
-            # ... código anterior ...
-    col_l, col_d = st.columns([1.2, 2])
-    with col_l:
-        st.info(f"Lista ({len(df_show)})")
-# ... st.dataframe sel ...
-# ... st.markdown("---") ...
-        with st.expander("➕ Novo Documento"):
-# ... Código para adicionar novo documento manualmente ...
-# ------------------------------------------------------------------
-# NOVO BLOCO: Importação de Documentos em Massa
-# ------------------------------------------------------------------
-        st.markdown("---")
-        with st.expander("⬆️ Importar em Massa (Excel/CSV)"):
-            import_file = st.file_uploader("Carregar arquivo (.xlsx ou .csv)", type=['xlsx', 'csv'])
-            if import_file:
-                # 1. Leitura do Arquivo e Tratamento
-                try:
-                    if import_file.name.endswith('.csv'):
-                        df_novo = pd.read_csv(import_file, encoding='utf-8')
-                    else:
-                        df_novo = pd.read_excel(import_file)
-                    
-                    # 2. Normalização e Preenchimento de Colunas Faltantes
-                    colunas_base = ['Unidade', 'Setor', 'Documento', 'CNPJ']
-                    for col in colunas_base:
-                        if col not in df_novo.columns:
-                            df_novo[col] = ""
-                    
-                    df_novo = df_novo[colunas_base]
-                    
-                    # 3. Preenchimento dos Valores Padrão (Default)
-                    hoje = date.today()
-                    df_novo['Data_Recebimento'] = hoje
-                    df_novo['Vencimento'] = hoje
-                    df_novo['Status'] = "NORMAL"
-                    df_novo['Progresso'] = 0
-                    df_novo['Concluido'] = "False"
-                    
-                    # Limpeza mínima: remove linhas sem nome de documento
-                    df_novo = df_novo[df_novo['Documento'].astype(str).str.strip() != ""]
-
-                    if st.button(f"Integrar {len(df_novo)} Documentos", type="primary"):
-                        # 4. Integração no DataFrame Principal
-                        global df_prazos, df_checklist # Garante acesso global
-                        
-                        # Adiciona ID_UNICO para o novo DataFrame
-                        df_novo['ID_UNICO'] = df_novo['Unidade'].astype(str) + " - " + df_novo['Documento'].astype(str)
-                        
-                        # Junta com o DataFrame existente e remove duplicatas (se o ID_UNICO já existir)
-                        df_prazos = pd.concat([df_prazos, df_novo], ignore_index=True)
-                        df_prazos = df_prazos.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
-                        
-                        # 5. Atualiza o cache e Salva (Opcional, mas recomendado para persistir)
-                        salvar_alteracoes_completo(df_prazos, df_checklist)
-                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                        st.success(f"✅ {len(df_novo)} documentos importados e salvos!")
-                        st.balloons()
-                        st.rerun()
-
-                except Exception as e:
-                    st.error(f"Erro ao processar o arquivo. Verifique se as colunas estão corretas. Detalhe: {e}")
-# ... restante do código ...
-
-
