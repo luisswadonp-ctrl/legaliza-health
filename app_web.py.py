@@ -128,7 +128,7 @@ def carregar_tudo():
             for c_date in ['Vencimento', 'Data_Recebimento']:
                 df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
             
-            # Garante que não tenhamos linhas vazias críticas, mas permite PENDENTE DE NOME
+            # Garante que não tenhamos linhas vazias críticas
             df_prazos = df_prazos[df_prazos['Unidade'] != ""]
             df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
@@ -280,7 +280,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v32.5 - Importação Unidade/CNPJ")
+    st.caption("v32.6 - Importação Correta e Rápida")
 
 # --- ROBÔ ---
 try:
@@ -416,7 +416,7 @@ elif menu == "Gestão de Docs":
                     else:
                         st.error("Preencha Unidade, Documento e CNPJ para adicionar.")
 
-        # BLOCO DE IMPORTAÇÃO (APENAS UNIDADE E CNPJ)
+        # BLOCO DE IMPORTAÇÃO (CAMPO UNIDADE E CNPJ)
         st.markdown("---")
         with st.expander("⬆️ Importar Unidades/CNPJ (Excel/CSV)"):
             import_file = st.file_uploader("Carregar arquivo (.xlsx ou .csv)", type=['xlsx', 'csv'], key="uploader_import_mass")
@@ -425,9 +425,8 @@ elif menu == "Gestão de Docs":
                 df_novo = pd.DataFrame()
                 
                 try:
-                    # Leitura Inteligente (Excel ou CSV BR/Intl)
-                    try:
-                        df_novo = pd.read_excel(import_file)
+                    # Leitura Inteligente
+                    try: df_novo = pd.read_excel(import_file)
                     except:
                         import_file.seek(0)
                         try: df_novo = pd.read_csv(import_file, sep=';', encoding='latin-1')
@@ -436,53 +435,52 @@ elif menu == "Gestão de Docs":
                             df_novo = pd.read_csv(import_file, sep=',', encoding='utf-8')
                     
                     if not df_novo.empty:
-                        # Limpa cabeçalho e seleciona SÓ o que o usuário quer
+                        # Normaliza cabeçalho (remove espaços)
                         df_novo.columns = df_novo.columns.str.strip()
-                        cols_desejadas = ['Unidade', 'CNPJ']
                         
                         # Verifica se as colunas essenciais existem
-                        cols_existentes = [c for c in cols_desejadas if c in df_novo.columns]
+                        # O usuario pediu: "Nome da unidade" -> Unidade, "CNPJ" -> Documento
                         
-                        if len(cols_existentes) < 2:
-                             st.error(f"Seu arquivo precisa ter as colunas 'Unidade' e 'CNPJ'. Encontrei apenas: {list(df_novo.columns)}")
-                        else:
-                            # Filtra apenas Unidade e CNPJ
-                            df_import = df_novo[cols_desejadas].copy()
-                            st.write("### 🔎 Pré-visualização (Será importado):")
+                        if 'Nome da unidade' in df_novo.columns and 'CNPJ' in df_novo.columns:
+                             # Mapeia as colunas conforme pedido
+                            df_import = df_novo[['Nome da unidade', 'CNPJ']].copy()
+                            df_import = df_import.rename(columns={'Nome da unidade': 'Unidade', 'CNPJ': 'Documento'})
+                            
+                            # DUPLICA O VALOR DO CNPJ PARA A COLUNA CNPJ TAMBÉM (para ter o dado correto)
+                            df_import['CNPJ'] = df_import['Documento']
+                            
+                            st.write("### 🔎 Pré-visualização:")
                             st.dataframe(df_import.head(5), use_container_width=True)
                             
                             if st.button(f"✅ Confirmar Importação de {len(df_import)} Linhas", type="primary"):
                                 
-                                # PREENCHIMENTO AUTOMÁTICO PARA FICAR IGUAL AO MANUAL
+                                # PREENCHIMENTO AUTOMÁTICO
                                 df_import['Setor'] = ""
-                                df_import['Documento'] = "PENDENTE DE NOME" # Nome provisório obrigatório
+                                # O Documento já é o CNPJ (vindo do rename acima)
                                 df_import['Data_Recebimento'] = date.today()
                                 df_import['Vencimento'] = date.today()
                                 df_import['Status'] = "NORMAL"
                                 df_import['Progresso'] = 0
                                 df_import['Concluido'] = "False"
                                 
-                                # Garante formato texto
                                 df_import['Unidade'] = df_import['Unidade'].astype(str)
+                                df_import['Documento'] = df_import['Documento'].astype(str)
                                 df_import['CNPJ'] = df_import['CNPJ'].astype(str)
 
                                 # Cria ID e Junta
                                 df_import['ID_UNICO'] = df_import['Unidade'] + " - " + df_import['Documento']
                                 
-                                # Para evitar duplicar "PENDENTE DE NOME" na mesma unidade, adicionamos timestamp se precisar, 
-                                # mas aqui vamos deixar simples: se já existe, sobrescreve ou mantém.
-                                # Vamos adicionar um contador simples no nome se duplicar seria melhor, 
-                                # mas para manter simples, vamos importar assim mesmo.
-                                
                                 df_combinado = pd.concat([df_prazos, df_import], ignore_index=True)
-                                # Remove duplicatas exatas se houver click duplo
-                                df_combinado = df_combinado.drop_duplicates(subset=['Unidade', 'CNPJ', 'Documento'], keep='last').reset_index(drop=True)
+                                df_combinado = df_combinado.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
                                 
                                 salvar_alteracoes_completo(df_combinado, df_checklist)
-                                st.success(f"✅ {len(df_import)} unidades importadas! Edite o nome dos documentos na lista.")
+                                st.success(f"✅ {len(df_import)} documentos importados! O nome do documento é o CNPJ.")
                                 st.balloons()
                                 time.sleep(2)
                                 st.rerun()
+
+                        else:
+                             st.error(f"Seu arquivo precisa ter as colunas 'Nome da unidade' e 'CNPJ'. Encontrei: {list(df_novo.columns)}")
 
                 except Exception as e:
                     st.error(f"Erro ao ler arquivo: {e}")
@@ -495,11 +493,10 @@ elif menu == "Gestão de Docs":
                 idx = indices[0]
                 doc_nome = df_prazos.at[idx, 'Documento']
                 
-                # --- EDIÇÃO DO NOME DO DOCUMENTO (Fundamental para importados) ---
+                # --- EDIÇÃO DO NOME DO DOCUMENTO ---
                 c_tit, c_edit_btn = st.columns([4, 1])
                 novo_nome_doc = c_tit.text_input("Nome do Documento", value=doc_nome, key=f"nome_doc_{doc_ativo_id}")
                 
-                # Se mudou o nome, precisa atualizar ID_UNICO e referencias
                 if novo_nome_doc != doc_nome:
                      if c_edit_btn.button("Salvar Nome"):
                         antigo_id = doc_ativo_id
@@ -509,7 +506,6 @@ elif menu == "Gestão de Docs":
                         df_prazos.at[idx, 'Documento'] = novo_nome_doc
                         df_prazos.at[idx, 'ID_UNICO'] = novo_id
                         
-                        # Atualiza checklist para apontar para o novo ID
                         df_checklist.loc[df_checklist['Documento_Ref'] == antigo_id, 'Documento_Ref'] = novo_id
                         
                         salvar_alteracoes_completo(df_prazos, df_checklist)
@@ -554,10 +550,12 @@ elif menu == "Gestão de Docs":
                     df_prazos.at[idx, 'Setor'] = novo_setor
                     
                     prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
-                    st.progress(prog_atual, text=f"Progressão: {prog_atual}%")
+                    # --- PLACEHOLDER PARA BARRA DE PROGRESSO SEM DELAY ---
+                    prog_bar_placeholder = st.empty()
+                    prog_bar_placeholder.progress(prog_atual, text=f"Progressão: {prog_atual}%")
 
                 st.write("✅ **Tarefas**")
-                # CORREÇÃO CRÍTICA BARRA DE PROGRESSO: FORÇA BOOLEAN
+                # CORREÇÃO CRÍTICA BARRA DE PROGRESSO
                 df_checklist['Feito'] = df_checklist['Feito'].replace({'TRUE': True, 'FALSE': False, 'True': True, 'False': False, 'nan': False})
                 df_checklist['Feito'] = df_checklist['Feito'].fillna(False).astype(bool)
                 
@@ -588,22 +586,23 @@ elif menu == "Gestão de Docs":
                         key=f"ed_{doc_ativo_id}"
                     )
                     
-                    # CALCULA E ATUALIZA PROGRESSO
+                    # --- CÁLCULO DE PROGRESSO OTIMIZADO (SEM RERUN) ---
                     tot = len(edited)
                     done = edited['Feito'].sum()
                     new_p = int((done/tot)*100) if tot > 0 else 0
                     
+                    # Atualiza a barra de progresso INSTANTANEAMENTE usando o placeholder
                     if new_p != prog_atual:
                         df_prazos.at[idx, 'Progresso'] = new_p
+                        prog_bar_placeholder.progress(new_p, text=f"Progressão: {new_p}%") # Atualiza visualmente lá em cima
                     
                     if not edited.equals(df_t):
+                        # Atualiza dados em memória mas NÃO DA RERUN (evita o delay)
                         df_checklist = df_checklist[~mask]
                         edited['Documento_Ref'] = str(doc_ativo_id)
                         df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
-                        
-                        # Salva progresso se mudou
-                        salvar_alteracoes_completo(df_prazos, df_checklist)
-                        st.rerun()
+                        # Nota: As alterações são salvas na memória da sessão.
+                        # O salvamento na nuvem só ocorre no botão "SALVAR TUDO NA NUVEM" para performance.
 
                 else: st.info("Adicione tarefas acima.")
 
