@@ -13,7 +13,8 @@ import requests
 import streamlit.components.v1 as components
 import pytz
 import io
-import plotly.express as px # NOVA BIBLIOTECA PARA GRÁFICOS
+import plotly.express as px
+import plotly.graph_objects as go
 
 # --- 1. CONFIGURAÇÃO GERAL ---
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
@@ -40,35 +41,39 @@ def get_img_as_base64(file):
 
 img_loading = get_img_as_base64("loading.gif")
 
-# Função Segura de Progresso
+# Função de Progresso
 def safe_prog(val):
     try: return max(0, min(100, int(float(val))))
     except: return 0
 
+# CSS PREMIUM
 st.markdown("""
 <style>
     .stApp { background-color: #0e1117; color: #e0e0e0; }
     
-    /* Cards clicáveis (simulação visual) */
-    div[data-testid="metric-container"] {
-        background-color: #1f2937; 
-        border: 1px solid #374151;
-        padding: 15px; 
-        border-radius: 10px;
-        transition: transform 0.2s;
-    }
-    div[data-testid="metric-container"]:hover {
-        transform: scale(1.02);
-        border-color: #64748b;
-        cursor: pointer;
+    /* Barra de Progresso VERDE */
+    .stProgress > div > div > div > div {
+        background-color: #00c853;
     }
     
+    /* Cards de Métricas */
+    div[data-testid="metric-container"] {
+        background-color: #1f2937;
+        border: 1px solid #374151;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    }
+    
+    /* Botões */
     .stButton>button {
-        border-radius: 8px; font-weight: bold; text-transform: uppercase;
+        border-radius: 8px; font-weight: 600; text-transform: uppercase;
         background-image: linear-gradient(to right, #2563eb, #1d4ed8);
         border: none; color: white;
     }
-    .stProgress > div > div > div > div { background-color: #00c853; }
+    
+    /* Títulos mais bonitos */
+    h1, h2, h3 { font-family: 'Segoe UI', sans-serif; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -108,6 +113,7 @@ def carregar_tudo():
         sh = conectar_gsheets()
         ws_prazos = sh.worksheet("Prazos")
         df_prazos = pd.DataFrame(ws_prazos.get_all_records())
+        
         try:
             ws_check = sh.worksheet("Checklist_Itens")
             df_check = pd.DataFrame(ws_check.get_all_records())
@@ -187,6 +193,7 @@ class PDF(FPDF):
         self.set_font('Arial', 'B', 12); self.cell(0, 10, 'Relatorio LegalizaHealth', 0, 1, 'C'); self.ln(5)
 def limpar_txt(t):
     if not isinstance(t, str): t = str(t)
+    # Remove emojis para não quebrar o PDF
     t = t.replace("✅", "[OK]").replace("❌", "[X]").replace("🚨", "[!]").replace("⚠️", "[!]")
     return t.encode('latin-1', 'replace').decode('latin-1')
 def baixar_imagem_url(url):
@@ -219,13 +226,10 @@ def gerar_pdf(vistorias):
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
 if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notificacao'] = datetime.min
 if 'doc_focado' not in st.session_state: st.session_state['doc_focado'] = None
-# Variável para o filtro do dashboard
-if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TODOS"
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v17.0 - Dashboard BI")
     menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -256,111 +260,86 @@ except: pass
 # --- TELAS ---
 
 if menu == "📊 Dashboard":
-    st.title("Painel de Controle Estratégico")
-    
-    # Carrega dados
+    st.title("Painel de Controle")
     if 'dados_cache' in st.session_state: df_p = st.session_state['dados_cache'][0]
     else: df_p, _ = carregar_tudo()
     
-    # --- ÁREA SUPERIOR: KPIs CLICÁVEIS ---
-    # Usamos botões invisíveis ou lógica de seleção
-    
+    # 1. Indicadores Principais
     n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
-    n_alto = len(df_p[df_p['Status'] == "ALTO"])
-    n_normal = len(df_p[df_p['Status'] == "NORMAL"])
+    n_conc = len(df_p[df_p['Progresso'] == 100])
     
-    # Layout de Cartões
     c1, c2, c3, c4 = st.columns(4)
+    c1.metric("🚨 Pontos Críticos", n_crit, delta="Atenção", delta_color="inverse")
+    c2.metric("✅ Concluídos", n_conc, delta="Sucesso", delta_color="normal")
+    c3.metric("📊 Total Processos", len(df_p))
+    c4.metric("📅 Data", date.today().strftime("%d/%m/%Y"))
     
-    # Botões que agem como filtros
-    if c1.button(f"🔴 CRÍTICOS: {n_crit}", use_container_width=True):
-        st.session_state['filtro_dash'] = "CRÍTICO"
-    if c2.button(f"🟠 ALTO RISCO: {n_alto}", use_container_width=True):
-        st.session_state['filtro_dash'] = "ALTO"
-    if c3.button(f"🟢 NORMAL: {n_normal}", use_container_width=True):
-        st.session_state['filtro_dash'] = "NORMAL"
-    if c4.button(f"📋 TOTAL: {len(df_p)}", use_container_width=True):
-        st.session_state['filtro_dash'] = "TODOS"
-
     st.markdown("---")
-
-    # --- ÁREA CENTRAL: VISUALIZAÇÃO ---
-    col_graf, col_tab = st.columns([1, 2])
+    
+    # 2. Gráficos e Visão Geral
+    col_graf, col_lista = st.columns([1, 1.5])
     
     with col_graf:
-        st.subheader("Panorama Geral")
-        # Gráfico de Pizza (Donut)
+        st.subheader("Saúde dos Documentos")
         if not df_p.empty:
-            status_count = df_p['Status'].value_counts().reset_index()
-            status_count.columns = ['Status', 'Qtd']
-            
-            # Cores personalizadas
-            color_map = {"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"}
-            
-            fig = px.pie(status_count, values='Qtd', names='Status', hole=0.5, 
-                         color='Status', color_discrete_map=color_map)
-            fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
+            # Gráfico de Rosca (Donut)
+            status_counts = df_p['Status'].value_counts()
+            fig = px.pie(
+                values=status_counts.values, 
+                names=status_counts.index, 
+                hole=0.6,
+                color=status_counts.index,
+                color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"}
+            )
+            fig.update_layout(showlegend=True, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig, use_container_width=True)
             
-            # Barra de Progresso Global
+            # Barra de Progresso Média Global
             media_prog = int(df_p['Progresso'].mean())
-            st.metric("Conclusão Global da Legalização", f"{media_prog}%")
+            st.write(f"**Progresso Geral da Rede: {media_prog}%**")
             st.progress(media_prog)
 
-    with col_tab:
-        filtro_atual = st.session_state['filtro_dash']
-        st.subheader(f"Detalhes: {filtro_atual}")
+    with col_lista:
+        st.subheader("⚠️ Próximos Vencimentos")
+        hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).date()
         
-        # Filtra a tabela com base no botão clicado
-        df_show = df_p.copy()
-        if filtro_atual != "TODOS":
-            df_show = df_show[df_show['Status'] == filtro_atual]
-        
-        if not df_show.empty:
-            # Tabela Rica com todas as informações pedidas
-            st.dataframe(
-                df_show[['Unidade', 'CNPJ', 'Documento', 'Vencimento', 'Progresso', 'Status']], 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "Progresso": st.column_config.ProgressColumn("Conclusão", format="%d%%"),
-                    "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
-                    "Status": st.column_config.TextColumn("Risco", width="small")
-                }
-            )
-        else:
-            st.info("Nenhum documento encontrado neste status.")
-
-    # --- ÁREA INFERIOR: PRÓXIMOS VENCIMENTOS (Timeline) ---
-    st.markdown("---")
-    st.subheader("📅 Próximos Vencimentos (Atenção)")
-    
-    hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).date()
-    # Pega apenas os não concluídos
-    df_pendente = df_p[df_p['Progresso'] < 100].copy()
-    
-    if not df_pendente.empty:
-        # Calcula dias restantes para ordenar
-        df_pendente['Dias_Restantes'] = (df_pendente['Vencimento'] - hoje).dt.days
-        # Ordena: Atrasados primeiro, depois os mais próximos
-        df_pendente = df_pendente.sort_values(by='Dias_Restantes').head(5)
-        
-        for index, row in df_pendente.iterrows():
-            dias = row['Dias_Restantes']
-            cor_card = "🔴" if dias < 0 else "🟠" if dias <= 15 else "🟢"
-            texto_prazo = f"ATRASADO HÁ {abs(dias)} DIAS" if dias < 0 else f"Vence em {dias} dias"
+        # Filtra não concluídos e ordena por data
+        df_pend = df_p[df_p['Progresso'] < 100].copy()
+        if not df_pend.empty:
+            df_pend['Dias'] = (df_pend['Vencimento'] - hoje).dt.days
+            df_pend = df_pend.sort_values(by='Dias').head(5)
             
-            with st.container(border=True):
-                c_a, c_b, c_c = st.columns([3, 2, 1])
-                c_a.markdown(f"**{row['Documento']}** ({row['Unidade']})")
-                c_b.caption(f"CNPJ: {row['CNPJ']}")
-                c_c.markdown(f"{cor_card} **{texto_prazo}**")
+            for _, row in df_pend.iterrows():
+                dias = row['Dias']
+                cor = "🔴" if dias < 0 else "🟠" if dias <= 15 else "🟢"
+                txt_pz = f"ATRASADO {abs(dias)} DIAS" if dias < 0 else f"Vence em {dias} dias"
+                
+                with st.container(border=True):
+                    cols = st.columns([3, 2])
+                    cols[0].markdown(f"**{row['Documento']}**")
+                    cols[0].caption(f"{row['Unidade']}")
+                    cols[1].markdown(f"{cor} {txt_pz}")
+                    st.progress(safe_prog(row['Progresso']))
+        else:
+            st.success("Nenhuma pendência próxima!")
+
+    # 3. Tabela Geral Ocultável
+    with st.expander("📋 Ver Lista Completa de Documentos"):
+        st.dataframe(
+            df_p[['Unidade', 'Documento', 'Vencimento', 'Status', 'Progresso']], 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={"Progresso": st.column_config.ProgressColumn("Progresso", format="%d%%")}
+        )
 
 elif menu == "📅 Gestão de Documentos":
     st.title("Gestão de Documentos")
-    if 'dados_cache' not in st.session_state: st.session_state['dados_cache'] = carregar_tudo()
+    
+    if 'dados_cache' not in st.session_state:
+        st.session_state['dados_cache'] = carregar_tudo()
     df_prazos, df_checklist = st.session_state['dados_cache']
     
+    # Filtros
     with st.expander("🔍 FILTROS & BUSCA", expanded=True):
         f1, f2, f3 = st.columns(3)
         lista_unidades = ["Todas"] + sorted(list(df_prazos['Unidade'].unique())) if 'Unidade' in df_prazos.columns else ["Todas"]
@@ -393,6 +372,7 @@ elif menu == "📅 Gestão de Documentos":
             doc_selecionado = df_filtrado.iloc[idx_selecionado]['Documento']
             st.session_state['doc_focado'] = doc_selecionado
         doc_ativo = st.session_state.get('doc_focado')
+        
         st.markdown("---")
         with st.expander("➕ Cadastrar Novo"):
             with st.form("form_novo", clear_on_submit=True):
