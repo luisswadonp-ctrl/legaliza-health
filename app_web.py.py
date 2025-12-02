@@ -63,7 +63,7 @@ st.markdown("""
     /* Cards de Métricas */
     div[data-testid="metric-container"] {
         background-color: #1f2937; border: 1px solid #374151;
-        padding: 15px; border-radius: 10px;
+        padding: 20px; border-radius: 12px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
     
@@ -74,11 +74,12 @@ st.markdown("""
         border: none; color: white;
     }
     
-    /* Títulos */
+    /* Ajuste de Títulos */
     h1, h2, h3 { font-family: 'Segoe UI', sans-serif; font-weight: 600; color: #f0f2f6; }
     
-    /* Ajuste de tabela */
-    [data-testid="stDataFrame"] { width: 100%; }
+    /* Esconder índices caso o parâmetro falhe visualmente */
+    thead tr th:first-child { display: none }
+    tbody th { display: none }
 </style>
 """, unsafe_allow_html=True)
 
@@ -126,29 +127,18 @@ def carregar_tudo():
             ws_check.append_row(["Documento_Ref", "Tarefa", "Feito"])
             df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
 
-        colunas = ["Unidade", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "Setor"]
+        colunas = ["Unidade", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
         for c in colunas:
             if c not in df_prazos.columns: df_prazos[c] = ""
             
         if not df_prazos.empty:
             df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
-            # Força string
-            df_prazos['Documento'] = df_prazos['Documento'].astype(str)
-            df_prazos['Unidade'] = df_prazos['Unidade'].astype(str)
-            df_prazos['Setor'] = df_prazos['Setor'].astype(str)
-            
             for c_date in ['Vencimento', 'Data_Recebimento']:
                 df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
             df_prazos = df_prazos[df_prazos['Documento'] != ""]
-            
-            # ID ÚNICO
-            df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
         
-        if df_check.empty: 
-            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
-        else:
-            df_check['Documento_Ref'] = df_check['Documento_Ref'].astype(str)
-            df_check = df_check[df_check['Tarefa'] != ""]
+        if df_check.empty: df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+        else: df_check = df_check[df_check['Tarefa'] != ""]
         
         return df_prazos, df_check
     except Exception as e:
@@ -160,23 +150,10 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_prazos = sh.worksheet("Prazos")
         ws_prazos.clear()
         df_p = df_prazos.copy()
-        
-        # Remove a coluna auxiliar ID_UNICO antes de salvar no Google
-        if 'ID_UNICO' in df_p.columns:
-            df_p = df_p.drop(columns=['ID_UNICO'])
-        
         for c_date in ['Vencimento', 'Data_Recebimento']:
             df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
-            
         df_p['Concluido'] = df_p['Concluido'].astype(str)
         df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
-        
-        # Garante ordem
-        colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
-        for c in colunas_ordem: 
-            if c not in df_p.columns: df_p[c] = ""
-        df_p = df_p[colunas_ordem]
-
         ws_prazos.update([df_p.columns.values.tolist()] + df_p.values.tolist())
         
         ws_check = sh.worksheet("Checklist_Itens")
@@ -184,7 +161,6 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         df_c = df_checklist.copy()
         df_c['Feito'] = df_c['Feito'].astype(str)
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
-        
         st.toast("✅ Salvo!", icon="☁️")
         return True
     except Exception as e:
@@ -259,7 +235,7 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v23.0 - Sector & Integrity")
+    st.caption("v21.0 - Clean Interface")
     menu = st.radio("Menu", ["📊 Painel de Controle", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -329,11 +305,11 @@ if menu == "📊 Painel de Controle":
             df_show = df_show[df_show['Status'] == f_atual]
             
         if not df_show.empty:
-            # ADICIONADO CAMPO SETOR NA TABELA
+            # MOSTRA COLUNAS RELEVANTES SEM ÍNDICE
             st.dataframe(
                 df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Status']], 
                 use_container_width=True, 
-                hide_index=True,
+                hide_index=True, # <--- AQUI ESTÁ A MÁGICA DO VISUAL LIMPO
                 column_config={
                     "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
                     "Status": st.column_config.TextColumn("Risco", width="small")
@@ -363,9 +339,12 @@ elif menu == "📅 Gestão de Documentos":
     col_l, col_d = st.columns([1.2, 2])
     with col_l:
         st.info(f"Lista ({len(df_show)})")
+        # TABELA DE SELEÇÃO LIMPA (SEM ÍNDICE)
         sel = st.dataframe(
-            df_show[['Unidade', 'Setor', 'Documento', 'Status']], 
-            use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun",
+            df_show[['Unidade', 'Documento', 'Status']], 
+            use_container_width=True, 
+            hide_index=True, # <--- LIMPO
+            selection_mode="single-row", on_select="rerun",
             column_config={"Status": st.column_config.TextColumn("Risco", width="small")}
         )
         
@@ -397,7 +376,6 @@ elif menu == "📅 Gestão de Documentos":
                 doc_nome = df_prazos.at[idx, 'Documento']
                 
                 st.subheader(f"📝 {doc_nome}")
-                # MOSTRA O SETOR AQUI NO CABEÇALHO TAMBÉM
                 st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
                 
                 c_del, _ = st.columns([1, 4])
@@ -421,9 +399,6 @@ elif menu == "📅 Gestão de Documentos":
                     cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
                     c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">Salvo: {st_curr}</span>', unsafe_allow_html=True)
                     
-                    # NOVO CAMPO DE SETOR PARA EDIÇÃO
-                    novo_setor = st.text_input("Editar Setor", value=df_prazos.at[idx, 'Setor'], key=f"edit_sector_{doc_ativo_id}")
-
                     try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
                     except: d_rec = date.today()
                     df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key=f"dt_rec_{doc_ativo_id}")
@@ -432,9 +407,8 @@ elif menu == "📅 Gestão de Documentos":
                     except: d_venc = date.today()
                     df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key=f"dt_venc_{doc_ativo_id}")
                     
-                    # ATUALIZA
                     df_prazos.at[idx, 'Status'] = novo_risco
-                    df_prazos.at[idx, 'Setor'] = novo_setor
+                    st.session_state['dados_cache'] = (df_prazos, df_checklist)
                     
                     prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
                     st.progress(prog_atual, text=f"Conclusão: {prog_atual}%")
@@ -459,7 +433,7 @@ elif menu == "📅 Gestão de Documentos":
                         df_t, 
                         num_rows="dynamic", 
                         use_container_width=True, 
-                        hide_index=True,
+                        hide_index=True, # <--- TAREFAS LIMPAS
                         column_config={
                             "Documento_Ref": None,
                             "Tarefa": st.column_config.TextColumn("Descrição", width="medium"),
