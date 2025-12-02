@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import time
 from fpdf import FPDF
 import tempfile
@@ -15,9 +15,9 @@ import pytz
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
 
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
-INTERVALO_GERAL = 60 # Minutos para o robô checar
+INTERVALO_GERAL = 60 # Minutos
 
-# --- AUTO-REFRESH (Mantém o sistema vivo a cada 60s) ---
+# --- AUTO-REFRESH (Mantém o robô vivo) ---
 components.html("""
 <script>
     setTimeout(function(){
@@ -26,7 +26,7 @@ components.html("""
 </script>
 """, height=0)
 
-# --- FUNÇÕES VISUAIS ---
+# --- FUNÇÕES ---
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f: data = f.read()
@@ -50,8 +50,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. CONEXÃO E DADOS ---
-
 def conectar_gsheets():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_dict = st.secrets["gcp_service_account"]
@@ -63,12 +61,8 @@ def enviar_resumo_push(lista_problemas):
     qtd = len(lista_problemas)
     if qtd == 0: return False
     
-    tem_atrasado = False
-    for p in lista_problemas:
-        if "ATRASADO" in p['status']:
-            tem_atrasado = True
-            break
-            
+    tem_atrasado = any("ATRASADO" in p['status'] for p in lista_problemas)
+    
     if tem_atrasado:
         titulo = f"⛔ URGENTE: {qtd} Pendências"
         prio = "urgent"; tags = "rotating_light"
@@ -96,7 +90,7 @@ def sincronizar_prazos_completo(df_novo):
         
         df_salvar = df_novo.copy()
         df_salvar['Concluido'] = df_salvar['Concluido'].astype(str)
-        # Salva data como texto simples para não bugar o sheets
+        # Salva data formatada bonito BR
         df_salvar['Vencimento'] = df_salvar['Vencimento'].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
         
         lista = [df_salvar.columns.values.tolist()] + df_salvar.values.tolist()
@@ -123,14 +117,21 @@ def carregar_dados_prazos():
         ws = sh.worksheet("Prazos")
         dados = ws.get_all_records()
         df = pd.DataFrame(dados)
-        
         if "Concluido" not in df.columns: df["Concluido"] = "False"
         
-        # --- CORREÇÃO DA DATA (O SEGREDO DO SUCESSO) ---
-        # 1. Tenta converter DD/MM/AAAA (Brasil)
-        # 2. Se falhar, tenta formato padrão
-        # 3. dayfirst=True é a chave para 03/12 ser Dezembro
-        df['Vencimento'] = pd.to_datetime(df['Vencimento'], dayfirst=True, errors='coerce').dt.date
+        # --- CORREÇÃO DE DATA BLINDADA ---
+        # Função para tentar ler DD/MM/AAAA na marra
+        def parse_br_date(d):
+            try:
+                return pd.to_datetime(d, format="%d/%m/%Y").date()
+            except:
+                try:
+                    # Se falhar, tenta genérico
+                    return pd.to_datetime(d).date()
+                except:
+                    return pd.NaT
+
+        df['Vencimento'] = df['Vencimento'].astype(str).apply(parse_br_date)
         
         df['Concluido'] = df['Concluido'].astype(str).str.upper() == 'TRUE'
         return df
@@ -139,9 +140,9 @@ def carregar_dados_prazos():
 
 def calcular_status(data_venc, concluido):
     if concluido: return 999, "✅ RESOLVIDO"
-    if pd.isnull(data_venc): return 0, "⚪ ERRO DATA"
+    if pd.isnull(data_venc): return 0, "⚪ DATA INVÁLIDA"
     
-    # Usa fuso horário de SP para garantir que "Hoje" é "Hoje no Brasil"
+    # Fuso Horário BRASIL
     fuso = pytz.timezone('America/Sao_Paulo')
     hoje = datetime.now(fuso).date()
     
@@ -153,7 +154,6 @@ def calcular_status(data_venc, concluido):
     elif dias <= 10: return dias, "🟠 ALTO"
     else: return dias, "🟢 NORMAL"
 
-# --- PDF ---
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 12)
@@ -176,21 +176,18 @@ def gerar_pdf(vistorias):
         pdf.ln(5)
     return bytes(pdf.output(dest='S'))
 
-# --- 3. INICIALIZAÇÃO ---
+# --- INTERFACE ---
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
 if 'ultima_notificacao' not in st.session_state: st.session_state['ultima_notificacao'] = datetime.min
 
-# --- 4. BARRA LATERAL ---
 with st.sidebar:
     if img_loading:
         st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
-    
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v5.1 - Final Fix")
     menu = st.radio("Menu", ["📊 Dashboard", "📅 Gestão de Prazos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
-# --- 5. ROBÔ ---
+# --- ROBÔ ---
 try:
     agora = datetime.now()
     diff = (agora - st.session_state['ultima_notificacao']).total_seconds() / 60
@@ -209,65 +206,44 @@ try:
             if enviar_resumo_push(lista_notif):
                 st.session_state['ultima_notificacao'] = agora
                 st.toast(f"🤖 Resumo enviado ({len(lista_notif)} itens)")
-except Exception as e:
-    print(f"Erro robô: {e}")
+except Exception as e: print(f"Erro robô: {e}")
 
-# --- 6. TELAS ---
-
+# --- TELAS ---
 if menu == "📊 Dashboard":
     st.title("Painel de Controle")
-    
-    # 1. Carrega dados
     df = carregar_dados_prazos()
     
-    # 2. Processa TODAS as linhas para garantir que Prazo_Txt exista
-    df['Prazo_Txt'] = "" 
+    criticos = []
+    atencao = []
     
-    criticos_lista = []
-    atencao_lista = []
+    # NOME LIMPO PARA O CLIENTE
+    df['Prazo'] = ""
 
     for index, row in df.iterrows():
-        # Calcula status para cada linha
         d, s = calcular_status(row['Vencimento'], row['Concluido'])
-        
-        # Salva no dataframe
         df.at[index, 'Status'] = s
         
-        # Cria texto bonito
-        if s == "⚪ ERRO DATA": txt = "---"
+        if s == "⚪ DATA INVÁLIDA": txt = "---"
         elif d < 0: txt = f"🚨 {abs(d)} dias ATRASO"
         elif d == 0: txt = "💥 VENCE HOJE"
         else: txt = f"{d} dias restantes"
         
-        df.at[index, 'Prazo_Txt'] = txt
+        df.at[index, 'Prazo'] = txt # Coluna com nome limpo
         
-        # Filtra para os contadores
         if not row['Concluido']:
-            if isinstance(s, str) and ("CRÍTICO" in s or "ATRASADO" in s or "HOJE" in s): 
-                criticos_lista.append(row) # Salva a linha JÁ processada
-            if isinstance(s, str) and "ALTO" in s: 
-                atencao_lista.append(row)
+            if isinstance(s, str) and ("CRÍTICO" in s or "ATRASADO" in s or "HOJE" in s): criticos.append(row)
+            if isinstance(s, str) and "ALTO" in s: atencao.append(row)
 
-    # 3. Exibe Métricas
     col1, col2, col3 = st.columns(3)
-    col1.metric("🚨 Risco Imediato", len(criticos_lista), delta="Ação" if len(criticos_lista) > 0 else "OK", delta_color="inverse")
-    col2.metric("🟠 Prioridade Alta", len(atencao_lista), delta_color="off")
+    col1.metric("🚨 Risco Imediato", len(criticos), delta="Ação" if len(criticos) > 0 else "OK", delta_color="inverse")
+    col2.metric("🟠 Prioridade Alta", len(atencao), delta_color="off")
     col3.metric("📋 Total", len(df))
     st.markdown("---")
     
-    # 4. Tabela de Alerta
-    if len(criticos_lista) > 0:
-        st.error(f"⚠️ Atenção! {len(criticos_lista)} documentos requerem sua ação.")
-        
-        # Converte a lista de linhas de volta para DataFrame para exibir
-        df_show = pd.DataFrame(criticos_lista)
-        
-        # Exibe apenas as colunas úteis (AQUI ESTAVA O PROBLEMA ANTES, AGORA VAI APARECER)
-        st.dataframe(
-            df_show[['Documento', 'Vencimento', 'Prazo_Txt', 'Status']], 
-            use_container_width=True, 
-            hide_index=True
-        )
+    if len(criticos) > 0:
+        st.error(f"⚠️ Atenção! {len(criticos)} documentos requerem sua ação.")
+        # Tabela sem números na esquerda (hide_index=True)
+        st.dataframe(pd.DataFrame(criticos)[['Documento', 'Vencimento', 'Prazo', 'Status']], use_container_width=True, hide_index=True)
     else:
         st.success("Tudo tranquilo.")
 
@@ -281,7 +257,7 @@ elif menu == "📅 Gestão de Prazos":
         st.session_state['df_prazos'],
         num_rows="dynamic",
         use_container_width=True,
-        hide_index=True,
+        hide_index=True, # Tira os números 0,1,2
         column_config={
             "Concluido": st.column_config.CheckboxColumn("✅ Feito?", default=False),
             "Status": st.column_config.TextColumn("Status", disabled=True),
@@ -295,7 +271,6 @@ elif menu == "📅 Gestão de Prazos":
         for index, row in df_alterado.iterrows():
             d, s = calcular_status(row['Vencimento'], row['Concluido'])
             df_alterado.at[index, 'Status'] = s
-        
         if sincronizar_prazos_completo(df_alterado):
             st.session_state['df_prazos'] = df_alterado
             st.success("Atualizado!")
