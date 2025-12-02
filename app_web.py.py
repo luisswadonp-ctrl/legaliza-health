@@ -90,7 +90,7 @@ def sincronizar_prazos_completo(df_novo):
         
         df_salvar = df_novo.copy()
         df_salvar['Concluido'] = df_salvar['Concluido'].astype(str)
-        # Salva data formatada bonito BR
+        # Salva data formatada bonito BR para não confundir o Excel
         df_salvar['Vencimento'] = df_salvar['Vencimento'].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
         
         lista = [df_salvar.columns.values.tolist()] + df_salvar.values.tolist()
@@ -119,19 +119,9 @@ def carregar_dados_prazos():
         df = pd.DataFrame(dados)
         if "Concluido" not in df.columns: df["Concluido"] = "False"
         
-        # --- CORREÇÃO DE DATA BLINDADA ---
-        # Função para tentar ler DD/MM/AAAA na marra
-        def parse_br_date(d):
-            try:
-                return pd.to_datetime(d, format="%d/%m/%Y").date()
-            except:
-                try:
-                    # Se falhar, tenta genérico
-                    return pd.to_datetime(d).date()
-                except:
-                    return pd.NaT
-
-        df['Vencimento'] = df['Vencimento'].astype(str).apply(parse_br_date)
+        # --- CORREÇÃO DE DATA BLINDADA (Brasil) ---
+        # dayfirst=True garante que 03/12 seja 3 de Dezembro, não 12 de Março
+        df['Vencimento'] = pd.to_datetime(df['Vencimento'], dayfirst=True, errors='coerce').dt.date
         
         df['Concluido'] = df['Concluido'].astype(str).str.upper() == 'TRUE'
         return df
@@ -216,19 +206,20 @@ if menu == "📊 Dashboard":
     criticos = []
     atencao = []
     
-    # NOME LIMPO PARA O CLIENTE
+    # Criando a coluna de texto amigável
     df['Prazo'] = ""
 
     for index, row in df.iterrows():
         d, s = calcular_status(row['Vencimento'], row['Concluido'])
         df.at[index, 'Status'] = s
         
+        # --- LÓGICA DO TEXTO (Aqui está a correção) ---
         if s == "⚪ DATA INVÁLIDA": txt = "---"
-        elif d < 0: txt = f"🚨 {abs(d)} dias ATRASO"
+        elif d < 0: txt = f"🚨 Atrasado há {abs(d)} dias"
         elif d == 0: txt = "💥 VENCE HOJE"
-        else: txt = f"{d} dias restantes"
+        else: txt = f"⏳ Vence em {d} dias"
         
-        df.at[index, 'Prazo'] = txt # Coluna com nome limpo
+        df.at[index, 'Prazo'] = txt # Salva o texto bonito na coluna
         
         if not row['Concluido']:
             if isinstance(s, str) and ("CRÍTICO" in s or "ATRASADO" in s or "HOJE" in s): criticos.append(row)
@@ -242,14 +233,14 @@ if menu == "📊 Dashboard":
     
     if len(criticos) > 0:
         st.error(f"⚠️ Atenção! {len(criticos)} documentos requerem sua ação.")
-        # Tabela sem números na esquerda (hide_index=True)
+        # Mostra a coluna 'Prazo' que criamos com o texto bonito
         st.dataframe(pd.DataFrame(criticos)[['Documento', 'Vencimento', 'Prazo', 'Status']], use_container_width=True, hide_index=True)
     else:
         st.success("Tudo tranquilo.")
 
 elif menu == "📅 Gestão de Prazos":
     st.title("Gestão de Documentos")
-    st.caption("Datas: Dia/Mês/Ano. Marque 'Feito' para finalizar.")
+    st.caption("Data: Dia/Mês/Ano. Marque 'Feito' para finalizar.")
     
     if 'df_prazos' not in st.session_state: st.session_state['df_prazos'] = carregar_dados_prazos()
     
@@ -257,7 +248,7 @@ elif menu == "📅 Gestão de Prazos":
         st.session_state['df_prazos'],
         num_rows="dynamic",
         use_container_width=True,
-        hide_index=True, # Tira os números 0,1,2
+        hide_index=True,
         column_config={
             "Concluido": st.column_config.CheckboxColumn("✅ Feito?", default=False),
             "Status": st.column_config.TextColumn("Status", disabled=True),
