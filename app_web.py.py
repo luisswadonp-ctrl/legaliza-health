@@ -27,7 +27,7 @@ except ImportError:
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
 
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
-INTERVALO_GERAL = 120 
+INTERVALO_GERAL = 120 # MINUTOS (2 HORAS)
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ" 
 
 # --- AUTO-REFRESH ---
@@ -66,9 +66,7 @@ st.markdown("""
         border: none; color: white;
     }
     .stProgress > div > div > div > div { background-color: #00c853; }
-    
-    /* Layout Mobile: Tabela e Gráfico Empilhados */
-    [data-testid="stDataFrame"] { width: 100%; border-radius: 8px; }
+    [data-testid="stDataFrame"] { width: 100%; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -277,7 +275,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v30.0 - Mobile Final")
+    st.caption("v31.0 - Estabilidade Final")
 
 # --- ROBÔ ---
 try:
@@ -285,6 +283,8 @@ try:
     diff = (agora - st.session_state['ultima_notificacao']).total_seconds() / 60
     df_alertas = st.session_state.get('dados_cache', [None])[0]
     if df_alertas is None and diff >= INTERVALO_GERAL: df_alertas, _ = carregar_tudo()
+    
+    # LÓGICA DO ALERTA (CORRIGIDA)
     if df_alertas is not None and diff >= INTERVALO_GERAL:
         lista_alerta = []
         hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).date()
@@ -292,10 +292,12 @@ try:
             try:
                 dias = (row['Vencimento'] - hoje).days
                 prog = safe_prog(row['Progresso'])
+                
+                # SÓ NOTIFICA SE O STATUS FOR ALTO/CRÍTICO E PROGRESSO < 100
                 if row['Status'] in ["ALTO", "CRÍTICO"] and prog < 100:
                     status_alerta = f"{row['Status']} (Manual)"
                     lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
-                elif dias <= 5 and prog < 100 and row['Status'] not in ["CRÍTICO", "ALTO"]:
+                elif dias <= 5 and prog < 100 and row['Status'] not in ["CRÍTICO", "ALTO"]: # Alerta por data se não for manual
                     status_alerta = f"PRAZO PRÓXIMO"
                     lista_alerta.append({"doc": row['Documento'], "status": status_alerta, "unidade": row['Unidade'], "setor": row['Setor']})
             except: pass
@@ -326,8 +328,7 @@ if menu == "Painel Geral":
     n_alto = len(df_p[df_p['Status'] == "ALTO"])
     n_norm = len(df_p[df_p['Status'] == "NORMAL"])
     
-    # LAYOUT MOBILE: KPIs empilhados, Tabela e Gráfico empilhados.
-    
+    # LAYOUT MOBILE-FIRST: EMPILHAMENTO FORÇADO
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
@@ -336,41 +337,42 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
-    # 1. TABELA DE ALERTA (Filtra de acordo com o clique)
-    f_atual = st.session_state['filtro_dash']
-    st.subheader(f"Lista de Processos: {f_atual}")
-    df_show = df_p.copy()
-    if f_atual != "TODOS":
-        df_show = df_show[df_show['Status'] == f_atual]
-        
-    if not df_show.empty:
-        st.dataframe(
-            df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], 
-            use_container_width=True, 
-            hide_index=True,
-            column_config={
-                "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
-                "Progresso": st.column_config.ProgressColumn("Prog", format="%d%%"),
-                "Status": st.column_config.TextColumn("Risco", width="small")
-            }
-        )
-    else:
-        st.info("Nenhum item neste status.")
-
-    st.markdown("---")
+    # 1. VISUALIZAÇÃO GRÁFICA (TOPO)
+    col_tab, col_graf = st.columns([1.5, 1]) 
     
-    # 2. GRÁFICO (Abaixo da Tabela)
-    st.subheader("Panorama")
-    if not df_p.empty and TEM_PLOTLY:
-        status_counts = df_p['Status'].value_counts()
-        fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
-            color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
-        fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
-        st.plotly_chart(fig, use_container_width=True)
-        
-        media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
-        st.metric("Progresso Geral", f"{media}%")
-        st.progress(media)
+    with col_tab:
+        f_atual = st.session_state['filtro_dash']
+        st.subheader(f"Lista de Processos: {f_atual}")
+        df_show = df_p.copy()
+        if f_atual != "TODOS":
+            df_show = df_show[df_show['Status'] == f_atual]
+            
+        if not df_show.empty:
+            st.dataframe(
+                df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"),
+                    "Progresso": st.column_config.ProgressColumn("Prog", format="%d%%"),
+                    "Status": st.column_config.TextColumn("Risco", width="small")
+                }
+            )
+        else:
+            st.info("Nenhum item neste status.")
+
+    with col_graf:
+        st.subheader("Panorama")
+        if not df_p.empty and TEM_PLOTLY:
+            status_counts = df_p['Status'].value_counts()
+            fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6,
+                color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
+            fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
+            st.plotly_chart(fig, use_container_width=True)
+            
+            media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
+            st.metric("Progresso Geral", f"{media}%")
+            st.progress(media)
 
 elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
@@ -477,7 +479,7 @@ elif menu == "Gestão de Docs":
                 
                 c_add, c_btn = st.columns([3, 1])
                 new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
-                if c_btn.button("ADICIONAR", key=f"btn_add_{doc_ativo_id}"):
+                if c_btn.button("ADICIONar", key=f"btn_add_{doc_ativo_id}"):
                     if new_t:
                         line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
                         df_checklist = pd.concat([df_checklist, line], ignore_index=True)
