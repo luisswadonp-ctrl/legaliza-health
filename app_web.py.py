@@ -27,7 +27,7 @@ except ImportError:
 st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
 
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
-INTERVALO_CHECK_ROBO = 60 # O robô verifica a cada 60 segundos se deu a hora de enviar
+INTERVALO_CHECK_ROBO = 60
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
 # --- LISTA PADRÃO DE DOCUMENTOS ---
@@ -155,7 +155,7 @@ def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
         return True
     except: return False
 
-@st.cache_data(ttl=60) # Cache de 1 min para leitura inicial
+@st.cache_data(ttl=60)
 def carregar_tudo_inicial():
     try:
         sh = conectar_gsheets()
@@ -305,10 +305,8 @@ def gerar_pdf(vistorias):
 
 # --- INTERFACE ---
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
-# --- CONTROLE DOS TIMERS DE NOTIFICAÇÃO ---
 if 'last_notify_critico' not in st.session_state: st.session_state['last_notify_critico'] = datetime.min
 if 'last_notify_alto' not in st.session_state: st.session_state['last_notify_alto'] = datetime.min
-
 if 'doc_focado_id' not in st.session_state: st.session_state['doc_focado_id'] = None
 if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TODOS"
 
@@ -330,17 +328,13 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v36.0 - Robô Inteligente")
+    st.caption("v37.0 - Painel com Busca")
 
 # --- ROBÔ INTELIGENTE V2 ---
 try:
     agora = datetime.now()
-    
-    # Verifica Timers
     diff_crit = (agora - st.session_state['last_notify_critico']).total_seconds() / 60
     diff_alto = (agora - st.session_state['last_notify_alto']).total_seconds() / 60
-    
-    # Carrega dados
     df_alertas = get_dados()[0]
     
     if df_alertas is not None:
@@ -350,12 +344,9 @@ try:
         
         for index, row in df_alertas.iterrows():
             try:
-                # 1. FILTRO: Ignora não editados (Pendentes/Selecione) e Normais
                 doc_nome = str(row['Documento'])
                 if "SELECIONE" in doc_nome or "PENDENTE" in doc_nome: continue
                 if row['Status'] == "NORMAL": continue
-                
-                # 2. FILTRO: Ignora Concluídos (Progresso 100%)
                 prog = safe_prog(row['Progresso'])
                 if prog >= 100: continue
 
@@ -363,10 +354,8 @@ try:
                 unidade = row['Unidade']
                 risco = row['Status']
                 
-                # Monta mensagem
                 msg = f"🏥 {unidade}\n📄 {doc_nome}\n⏳ Vence em {dias} dias"
                 
-                # 3. Lógica de Agrupamento
                 if risco == "CRÍTICO" and (dias <= 5 or dias < 0):
                     msgs_crit.append(msg)
                 elif risco == "ALTO" and (dias <= 5 or dias < 0):
@@ -374,15 +363,12 @@ try:
                     
             except: pass
         
-        # 4. ENVIO CONDICIONAL POR TIMER
-        # CRÍTICO (A cada 60 min)
         if msgs_crit and diff_crit >= 60:
-            corpo = "\n----------------\n".join(msgs_crit[:10]) # Limita a 10 para não explodir
+            corpo = "\n----------------\n".join(msgs_crit[:10])
             if len(msgs_crit) > 10: corpo += f"\n... e mais {len(msgs_crit)-10} itens."
             if enviar_notificacao_push("🚨 ALERTA CRÍTICO (1h)", corpo, "high"):
                 st.session_state['last_notify_critico'] = agora
         
-        # ALTO (A cada 180 min / 3h)
         if msgs_alto and diff_alto >= 180:
             corpo = "\n----------------\n".join(msgs_alto[:10])
             if len(msgs_alto) > 10: corpo += f"\n... e mais {len(msgs_alto)-10} itens."
@@ -413,11 +399,20 @@ if menu == "Painel Geral":
     
     st.markdown("---")
     
+    # --- NOVO: BUSCA NO PAINEL ---
+    busca_painel = st.text_input("🔎 Buscar Unidade/Documento", placeholder="Digite o nome da unidade ou documento...")
+
     f_atual = st.session_state['filtro_dash']
     st.subheader(f"Lista de Processos: {f_atual}")
     df_show = df_p.copy()
+    
+    # 1. Filtro Status
     if f_atual != "TODOS":
         df_show = df_show[df_show['Status'] == f_atual]
+        
+    # 2. Filtro Busca (Acumulativo)
+    if busca_painel:
+        df_show = df_show[df_show.astype(str).apply(lambda x: x.str.contains(busca_painel, case=False)).any(axis=1)]
         
     if not df_show.empty:
         st.dataframe(
@@ -431,7 +426,7 @@ if menu == "Painel Geral":
             }
         )
     else:
-        st.info("Nenhum item neste status.")
+        st.info("Nenhum item encontrado com esses filtros.")
 
     st.markdown("---")
     
@@ -566,7 +561,7 @@ elif menu == "Gestão de Docs":
                 idx = indices[0]
                 doc_nome = df_prazos.at[idx, 'Documento']
                 
-                # --- EDIÇÃO DO TIPO DO DOCUMENTO (LISTA DROPDOWN) ---
+                # --- EDIÇÃO DO TIPO DO DOCUMENTO ---
                 c_tit, c_edit_btn = st.columns([4, 1])
                 
                 opcoes_docs = LISTA_TIPOS_DOCUMENTOS.copy()
