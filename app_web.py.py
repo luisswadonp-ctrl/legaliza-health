@@ -73,9 +73,6 @@ st.markdown("""
         background-image: linear-gradient(to right, #2563eb, #1d4ed8);
         border: none; color: white;
     }
-    
-    /* Remove padding extra */
-    .block-container { padding-top: 2rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -147,16 +144,12 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_prazos.clear()
         df_p = df_prazos.copy()
         
-        # Garante colunas na ordem certa
-        colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
-        for c in colunas_ordem:
-            if c not in df_p.columns: df_p[c] = ""
-        df_p = df_p[colunas_ordem]
-
         for c_date in ['Vencimento', 'Data_Recebimento']:
             df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
+            
         df_p['Concluido'] = df_p['Concluido'].astype(str)
         df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
+        
         ws_prazos.update([df_p.columns.values.tolist()] + df_p.values.tolist())
         
         ws_check = sh.worksheet("Checklist_Itens")
@@ -238,7 +231,7 @@ if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TOD
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     st.markdown("### LegalizaHealth Pro")
-    st.caption("v20.0 - Clean & Fast")
+    st.caption("v21.0 - Clean & Dynamic")
     menu = st.radio("Menu", ["📊 Painel de Controle", "📅 Gestão de Documentos", "📸 Nova Vistoria", "📂 Relatórios"])
     st.markdown("---")
 
@@ -322,7 +315,7 @@ elif menu == "📅 Gestão de Documentos":
         lista_uni = ["Todas"] + sorted(list(df_prazos['Unidade'].unique())) if 'Unidade' in df_prazos.columns else ["Todas"]
         f_uni = f1.selectbox("Unidade:", lista_uni)
         f_stt = f2.multiselect("Status:", ["CRÍTICO", "ALTO", "NORMAL"])
-        f_txt = f3.text_input("Buscar (Nome/CNPJ):")
+        f_txt = f3.text_input("Buscar (Nome/CNPJ/Setor):")
         if st.button("Limpar"): st.rerun()
 
     df_show = df_prazos.copy()
@@ -332,7 +325,7 @@ elif menu == "📅 Gestão de Documentos":
 
     col_l, col_d = st.columns([1.2, 2])
     with col_l:
-        st.info(f"Lista ({len(df_show)})")
+        st.info(f"Encontrados: {len(df_show)}")
         sel = st.dataframe(df_show[['Unidade', 'Documento', 'Status']], use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun",
             column_config={"Status": st.column_config.TextColumn("Risco", width="small")})
         
@@ -342,7 +335,6 @@ elif menu == "📅 Gestão de Documentos":
         
         st.markdown("---")
         with st.expander("➕ Novo Documento"):
-            # FORMULARIO AUTO-LIMPANTE
             with st.form("new_doc", clear_on_submit=True):
                 n_u = st.text_input("Unidade")
                 n_s = st.text_input("Setor")
@@ -381,11 +373,11 @@ elif menu == "📅 Gestão de Documentos":
                     
                     try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
                     except: d_rec = date.today()
-                    df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec)
+                    df_prazos.at[idx, 'Data_Recebimento'] = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key="dt_rec")
                     
                     try: d_venc = pd.to_datetime(df_prazos.at[idx, 'Vencimento'], dayfirst=True).date()
                     except: d_venc = date.today()
-                    df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc)
+                    df_prazos.at[idx, 'Vencimento'] = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key="dt_venc")
                     
                     prog = safe_prog(df_prazos.at[idx, 'Progresso'])
                     st.progress(prog, text=f"Conclusão: {prog}%")
@@ -395,39 +387,54 @@ elif menu == "📅 Gestão de Documentos":
                 mask = df_checklist['Documento_Ref'] == doc_ativo
                 df_t = df_checklist[mask].copy()
                 
-                # FORMULARIO TAREFA AUTO-LIMPANTE
-                with st.form(key=f"add_task_{doc_ativo}", clear_on_submit=True):
-                    new_t = st.text_input("Nova tarefa...", label_visibility="collapsed")
-                    if st.form_submit_button("ADICIONAR"):
-                        if new_t:
-                            line = pd.DataFrame([{"Documento_Ref": doc_ativo, "Tarefa": new_t, "Feito": False}])
-                            df_checklist = pd.concat([df_checklist, line], ignore_index=True)
-                            st.session_state['dados_cache'] = (df_prazos, df_checklist)
-                            st.rerun()
+                # ADICIONAR TAREFA
+                col_t_inp, col_t_btn = st.columns([3, 1])
+                new_t = col_t_inp.text_input("Nova tarefa...", label_visibility="collapsed")
+                if col_t_btn.button("ADICIONAR"):
+                    if new_t:
+                        line = pd.DataFrame([{"Documento_Ref": doc_ativo, "Tarefa": new_t, "Feito": False}])
+                        df_checklist = pd.concat([df_checklist, line], ignore_index=True)
+                        st.session_state['dados_cache'] = (df_prazos, df_checklist)
+                        st.rerun()
 
+                # Tabela Editável Dinâmica (Permite Delete)
                 if not df_t.empty:
-                    edited = st.data_editor(df_t, num_rows="fixed", use_container_width=True, hide_index=True,
-                        column_config={"Documento_Ref": None, "Tarefa": st.column_config.TextColumn("Descrição", disabled=True), "Feito": st.column_config.CheckboxColumn("OK", width="small")},
-                        key=f"ed_{doc_ativo}")
+                    edited = st.data_editor(
+                        df_t, 
+                        num_rows="dynamic", # Permite adicionar e remover linhas
+                        use_container_width=True, 
+                        hide_index=True,
+                        column_config={
+                            "Documento_Ref": None,
+                            "Tarefa": st.column_config.TextColumn("Descrição", width="medium"),
+                            "Feito": st.column_config.CheckboxColumn("OK", width="small")
+                        },
+                        key=f"ed_{doc_ativo}"
+                    )
                     
-                    tot = len(edited); done = edited['Feito'].sum()
-                    new_p = int((done/tot)*100) if tot > 0 else 0
+                    # Cálculo Progresso
+                    total = len(edited)
+                    feitos = edited['Feito'].sum()
+                    new_p = int((feitos/total)*100) if total > 0 else 0
+                    
                     if new_p != prog:
                         df_prazos.at[idx, 'Progresso'] = new_p
                         st.session_state['dados_cache'] = (df_prazos, df_checklist)
                     
+                    # Atualiza checklist mestre
                     df_checklist = df_checklist[~mask]
+                    # Garante que novas linhas manuais tenham o ref correto
                     edited['Documento_Ref'] = doc_ativo
                     df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
                     st.session_state['dados_cache'] = (df_prazos, df_checklist)
                     if new_p != prog: st.rerun()
                 
+                else: st.info("Adicione tarefas acima.")
+
                 st.markdown("---")
-                if st.button("💾 SALVAR TUDO NA NUVEM", type="primary"):
+                if st.button("💾 SALVAR TUDO", type="primary"):
                     if salvar_alteracoes_completo(df_prazos, df_checklist): time.sleep(0.5); st.rerun()
-            else:
-                st.warning("Documento não encontrado.")
-                if st.button("Voltar"): st.session_state['doc_focado'] = None; st.rerun()
+            else: st.warning("Não encontrado.")
         else: st.info("👈 Selecione um documento.")
 
 elif menu == "📸 Nova Vistoria":
