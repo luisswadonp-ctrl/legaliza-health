@@ -228,6 +228,7 @@ def aplicar_inteligencia_doc(tipo_doc, data_base=None):
                 info = dados
                 break
     if not info: info = DOC_INTELLIGENCE["DEFAULT"]
+    
     novo_vencimento = data_base
     if info["dias"] > 0: novo_vencimento = data_base + timedelta(days=info["dias"])
     return info["risco"], novo_vencimento, info["link"], info["tarefas"]
@@ -423,11 +424,13 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     pdf.add_page()
     pdf.set_font("Arial", "B", 12)
     epw = pdf.w - 2*pdf.l_margin 
+    
     pdf.set_fill_color(220, 220, 220)
     pdf.cell(epw, 10, "DADOS DO CLIENTE / UNIDADE", 1, 1, 'L', fill=True)
     pdf.set_font("Arial", "", 11)
     pdf.multi_cell(epw, 6, f"Cliente: {limpar_texto_pdf(nome_cliente)}\nEndereco: {limpar_texto_pdf(endereco_cliente)}\nTipo: {limpar_texto_pdf(tipo_estabelecimento)}", 1)
     pdf.ln(5)
+
     total = len(itens_vistoria)
     criticos = sum(1 for i in itens_vistoria if i['Gravidade'] == 'CRÍTICO')
     pdf.set_font("Arial", "B", 12)
@@ -436,32 +439,41 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     pdf.set_font("Arial", "", 11)
     pdf.cell(epw, 8, f"Total de Apontamentos: {total} | Pontos Criticos: {criticos}", 1, 1)
     pdf.ln(5)
+
     audios_para_zip = []
     for idx, item in enumerate(itens_vistoria):
         if pdf.get_y() > 250: pdf.add_page()
+        
         if item['Gravidade'] == 'CRÍTICO': pdf.set_fill_color(255, 200, 200)
         elif item['Gravidade'] == 'Alto': pdf.set_fill_color(255, 230, 200)
         else: pdf.set_fill_color(230, 255, 230)
+        
         local_safe = limpar_texto_pdf(item['Local'])
         item_safe = limpar_texto_pdf(item['Item'])
         obs_safe = limpar_texto_pdf(item['Obs'])
+        
         pdf.set_font("Arial", "B", 11)
         pdf.multi_cell(epw, 8, f"#{idx+1} - {local_safe}", 1, 'L', fill=True)
+        
         pdf.set_font("Arial", "B", 10)
         pdf.set_x(pdf.l_margin)
         pdf.multi_cell(epw, 6, f"NC Identificada: {item_safe}", 1, 'L')
+        
         pdf.set_font("Arial", "", 10)
         pdf.set_x(pdf.l_margin) 
         pdf.cell(epw/2, 6, f"Status: {limpar_texto_pdf(item['Situação'])}", 1, 0, 'L')
         pdf.cell(epw/2, 6, f"Risco: {limpar_texto_pdf(item['Gravidade'])}", 1, 1, 'L')
+        
         info_extra = ""
         if item.get('Audio_Bytes'):
             nome_audio = f"Audio_Item_{idx+1}.wav"
             audios_para_zip.append((nome_audio, item['Audio_Bytes']))
             info_extra = f" [AUDIO ANEXO: {nome_audio}]"
+            
         pdf.set_x(pdf.l_margin)
         pdf.multi_cell(epw, 6, f"Nota Tecnica: {obs_safe}{info_extra}", 1, 'L')
         pdf.ln(2)
+        
         if item['Fotos']:
             x_start = 10; y_start = pdf.get_y(); img_w = 45; img_h = 45
             for i, foto_bytes in enumerate(item['Fotos']):
@@ -477,6 +489,7 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
             pdf.set_y(y_start + img_h + 10)
         else: pdf.ln(2)
         pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(5)
+        
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         pdf_bytes = pdf.output() 
@@ -523,7 +536,7 @@ if 'cliente_endereco' not in st.session_state: st.session_state['cliente_enderec
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v58.0 - Dashboard BI")
+    st.caption("v60.0 - Dashboard Prazos")
 
 # --- ROBÔ ---
 try:
@@ -559,41 +572,102 @@ except Exception as e: pass
 
 # --- TELAS ---
 if menu == "Painel Geral":
-    st.title("Painel de Controle Estratégico")
+    st.title("Painel de Controle Estratégico (Prazos)")
     df_p, _ = get_dados()
+    
     if df_p.empty:
         st.warning("Ainda não há documentos cadastrados. Adicione na aba 'Gestão de Docs'.")
         st.stop()
-    n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
-    n_alto = len(df_p[df_p['Status'] == "ALTO"])
-    n_norm = len(df_p[df_p['Status'] == "NORMAL"])
-    c1, c2, c3, c4 = st.columns(4)
-    if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
-    if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
-    if c3.button(f"🟢 NORMAL: {n_norm}", use_container_width=True): st.session_state['filtro_dash'] = "NORMAL"
-    if c4.button(f"📋 TOTAL: {len(df_p)}", use_container_width=True): st.session_state['filtro_dash'] = "TODOS"
+    
+    # --- PREPARAÇÃO DE DADOS (DATA INTELLIGENCE) ---
+    # Converte para datetime
+    df_p['Vencimento_dt'] = pd.to_datetime(df_p['Vencimento'], dayfirst=True, errors='coerce')
+    hoje = pd.to_datetime('today')
+    
+    # Cria coluna de Mês/Ano (Ex: 2023-10)
+    df_p['Mes_Vencimento'] = df_p['Vencimento_dt'].dt.to_period('M').astype(str)
+    
+    # --- KPIS ---
+    k1, k2, k3, k4 = st.columns(4)
+    
+    # 1. Críticos
+    n_crit = len(df_p[df_p['Status'] == 'CRÍTICO'])
+    k1.metric("Docs Críticos", n_crit, delta="Atenção" if n_crit > 0 else "Ok", delta_color="inverse")
+    
+    # 2. Vencidos
+    n_vencidos = len(df_p[df_p['Vencimento_dt'] < hoje])
+    k2.metric("Vencidos Hoje", n_vencidos, delta="-Urgente" if n_vencidos > 0 else "Ok", delta_color="inverse")
+    
+    # 3. Vencem em 30 dias
+    data_30d = hoje + timedelta(days=30)
+    n_30d = len(df_p[(df_p['Vencimento_dt'] >= hoje) & (df_p['Vencimento_dt'] <= data_30d)])
+    k3.metric("Vencem em 30d", n_30d, delta="Planejar")
+    
+    # 4. Média de Progresso
+    media_prog = int(df_p['Progresso'].mean())
+    k4.metric("Progresso Geral", f"{media_prog}%")
+    
     st.markdown("---")
-    busca_painel = st.text_input("🔎 Buscar Unidade/Documento", placeholder="Ex: gravatai, crm, alvara...")
-    f_atual = st.session_state['filtro_dash']
-    st.subheader(f"Lista de Processos: {f_atual}")
-    df_show = df_p.copy()
-    if f_atual != "TODOS": df_show = df_show[df_show['Status'] == f_atual]
-    if busca_painel:
-        termo = normalizar_texto(busca_painel)
-        df_show = df_show[df_show.apply(lambda row: termo in normalizar_texto(str(row.values)), axis=1)]
-    if not df_show.empty:
-        st.dataframe(df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], use_container_width=True, hide_index=True, column_config={"Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"), "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"), "Status": st.column_config.TextColumn("Risco", width="small")})
-    else: st.info("Nenhum item encontrado.")
-    st.markdown("---")
-    st.subheader("Panorama")
-    if not df_p.empty and TEM_PLOTLY:
-        status_counts = df_p['Status'].value_counts()
-        fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6, color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
-        fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
-        st.plotly_chart(fig, use_container_width=True)
-        media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
-        st.metric("Progressão Geral", f"{media}%")
-        st.progress(media)
+    
+    # --- GRÁFICOS NOVOS (PRAZOS) ---
+    if TEM_PLOTLY:
+        c_g1, c_g2 = st.columns(2)
+        
+        # GRÁFICO 1: TIMELINE DE VENCIMENTOS (Próximos 6 meses)
+        # Filtra apenas datas válidas
+        df_timeline = df_p[df_p['Vencimento_dt'].notna()].copy()
+        # Agrupa por mês e conta
+        vencimentos_por_mes = df_timeline.groupby('Mes_Vencimento').size().reset_index(name='Quantidade')
+        # Ordena cronologicamente
+        vencimentos_por_mes = vencimentos_por_mes.sort_values('Mes_Vencimento')
+        
+        fig_timeline = px.bar(
+            vencimentos_por_mes, 
+            x='Mes_Vencimento', 
+            y='Quantidade', 
+            title="📅 Cronograma de Vencimentos (Próximos Meses)",
+            color='Quantidade',
+            color_continuous_scale='Reds'
+        )
+        c_g1.plotly_chart(fig_timeline, use_container_width=True)
+        
+        # GRÁFICO 2: RISCO POR UNIDADE (Quem está pior?)
+        # Agrupa por Unidade e Status
+        risco_unidade = df_p.groupby(['Unidade', 'Status']).size().reset_index(name='Quantidade')
+        
+        fig_risco = px.bar(
+            risco_unidade, 
+            x='Unidade', 
+            y='Quantidade', 
+            color='Status', 
+            title="🏥 Saúde das Unidades (Risco)",
+            color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853", "MÉDIO": "#ffd700", "BAIXO": "#81c784"},
+            barmode='stack'
+        )
+        c_g2.plotly_chart(fig_risco, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # GRÁFICO 3: MATRIZ DE URGÊNCIA (Dias Restantes x Progresso)
+        # Calcula dias restantes
+        df_p['Dias_Restantes'] = (df_p['Vencimento_dt'] - hoje).dt.days
+        # Filtra apenas quem não acabou (Progresso < 100)
+        df_pendentes = df_p[df_p['Progresso'] < 100].copy()
+        
+        if not df_pendentes.empty:
+            fig_matriz = px.scatter(
+                df_pendentes, 
+                x='Dias_Restantes', 
+                y='Progresso', 
+                color='Status',
+                size='Dias_Restantes', # Bolinha maior = mais prazo (visual invertido, cuidado) -> Vamos fixar tamanho
+                hover_data=['Documento', 'Unidade'],
+                title="🚨 Matriz de Urgência (Docs Pendentes)",
+                color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"}
+            )
+            # Adiciona linha de "HOJE" (Dia 0)
+            fig_matriz.add_vline(x=0, line_width=2, line_dash="dash", line_color="red", annotation_text="Vence Hoje")
+            st.plotly_chart(fig_matriz, use_container_width=True)
 
 elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
@@ -892,69 +966,46 @@ elif menu == "Vistoria Mobile":
 
 elif menu == "Relatórios":
     st.title("📊 Dashboard de Inteligência")
-    
     tab_dash, tab_audit_db = st.tabs(["🚀 Dashboard Executivo", "📂 Histórico de Vistorias (Nuvem)"])
-    
-    # --- TAB 1: DASHBOARD BI ---
     with tab_dash:
         df_docs, _ = get_dados()
         df_audits = carregar_historico_vistorias()
+        df_mobile_temp = pd.DataFrame(st.session_state['sessao_vistoria'])
+        if not df_mobile_temp.empty:
+            df_mobile_temp = df_mobile_temp.rename(columns={'Local': 'Setor', 'Gravidade': 'Status'})
         
-        # KPIs Principais
         k1, k2, k3, k4 = st.columns(4)
-        
-        # KPI 1: Documentos Críticos
         n_crit = len(df_docs[df_docs['Status'] == 'CRÍTICO']) if not df_docs.empty else 0
         k1.metric("Docs Críticos", n_crit, delta="Atenção!" if n_crit > 0 else "Ok", delta_color="inverse")
-        
-        # KPI 2: Conformidade Global
         media_prog = int(df_docs['Progresso'].mean()) if not df_docs.empty else 0
         k2.metric("Conformidade Docs", f"{media_prog}%")
-        
-        # KPI 3: Vistorias Realizadas (Total)
-        total_vistorias = len(df_audits) if not df_audits.empty else 0
-        k3.metric("Vistorias Realizadas", total_vistorias)
-        
-        # KPI 4: Docs Vencidos
+        total_vistorias = (len(df_audits) if not df_audits.empty else 0) + len(df_mobile_temp)
+        k3.metric("Apontamentos (Total)", total_vistorias)
         vencidos = 0
         if not df_docs.empty:
             hoje = date.today()
-            # Converte para data se possível
             df_docs['Vencimento_dt'] = pd.to_datetime(df_docs['Vencimento'], dayfirst=True, errors='coerce').dt.date
             vencidos = len(df_docs[df_docs['Vencimento_dt'] < hoje])
         k4.metric("Docs Vencidos", vencidos, delta="-Ação Imediata" if vencidos > 0 else "Ok", delta_color="inverse")
-        
         st.markdown("---")
-        
-        # GRÁFICOS AVANÇADOS (PLOTLY)
         if TEM_PLOTLY:
             c_g1, c_g2 = st.columns(2)
-            
-            # Gráfico 1: Sunburst de Documentos (Status -> Setor)
             if not df_docs.empty:
                 fig_sun = px.sunburst(df_docs, path=['Status', 'Setor'], title="Distribuição de Risco por Setor")
                 c_g1.plotly_chart(fig_sun, use_container_width=True)
-            else:
-                c_g1.info("Sem dados de documentos.")
-            
-            # Gráfico 2: Problemas Recorrentes em Vistorias (Top 5)
-            if not df_audits.empty and 'Item' in df_audits.columns:
-                top_ncs = df_audits['Item'].value_counts().head(5).reset_index()
+            df_combined_audit = pd.concat([df_audits, df_mobile_temp], ignore_index=True) if not df_audits.empty else df_mobile_temp
+            if not df_combined_audit.empty and 'Item' in df_combined_audit.columns:
+                top_ncs = df_combined_audit['Item'].value_counts().head(5).reset_index()
                 top_ncs.columns = ['NC / Problema', 'Ocorrências']
-                fig_bar = px.bar(top_ncs, x='Ocorrências', y='NC / Problema', orientation='h', title="Top 5 Problemas Recorrentes (Auditoria)")
+                fig_bar = px.bar(top_ncs, x='Ocorrências', y='NC / Problema', orientation='h', title="Top 5 Problemas (Histórico + Atual)")
                 c_g2.plotly_chart(fig_bar, use_container_width=True)
-            else:
-                c_g2.info("Sem dados suficientes de vistorias.")
-
-    # --- TAB 2: HISTÓRICO (CRUD ANTIGO) ---
+    
     with tab_audit_db:
         st.info("Edição de dados brutos salvos na nuvem.")
         if not df_audits.empty:
             sel = st.selectbox("Filtrar por Data:", ["Todas"] + sorted(list(df_audits['Data'].unique()), reverse=True))
             df_f = df_audits if sel == "Todas" else df_audits[df_audits['Data'] == sel]
-            
             st.dataframe(df_f, use_container_width=True)
-            
             with st.expander("✏️ Editar Registros (Avançado)"):
                 df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True)
                 if st.button("💾 Salvar Edição na Nuvem"):
