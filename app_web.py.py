@@ -205,7 +205,7 @@ def transcrever_audio(audio_file):
         return texto
     except: return ""
 
-# --- GERADOR DE ZIP (CORRIGIDO) ---
+# --- GERADOR DE ZIP (CORREÇÃO FINAL) ---
 class RelatorioPDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 14)
@@ -249,11 +249,9 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
         obs_safe = limpar_texto_pdf(item['Obs'])
         
         pdf.set_font("Arial", "B", 11)
-        # --- CORREÇÃO AQUI: Largura explícita (epw) em vez de 0 ---
         pdf.multi_cell(epw, 8, f"#{idx+1} - {local_safe}", 1, 'L', fill=True)
         
         pdf.set_font("Arial", "B", 10)
-        # --- CORREÇÃO AQUI TAMBÉM ---
         pdf.multi_cell(epw, 6, f"NC Identificada: {item_safe}")
         
         pdf.set_font("Arial", "", 10)
@@ -264,7 +262,6 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
             audios_para_zip.append((nome_audio, item['Audio_Bytes']))
             info_extra = f" [AUDIO ANEXO: {nome_audio}]"
 
-        # --- CORREÇÃO AQUI TAMBÉM ---
         pdf.multi_cell(epw, 6, f"Status: {limpar_texto_pdf(item['Situação'])}\nGravidade: {limpar_texto_pdf(item['Gravidade'])}\nTecnica: {obs_safe}{info_extra}")
         pdf.ln(2)
         
@@ -286,7 +283,8 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
 
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-        pdf_bytes = pdf.output(dest='S').encode('latin-1')
+        # CORREÇÃO FINAL: FPDF2 JÁ RETORNA BYTES
+        pdf_bytes = pdf.output() 
         zip_file.writestr(f"Relatorio_Vistoria_{datetime.now().strftime('%d-%m')}.pdf", pdf_bytes)
         for nome_arq, dados_audio in audios_para_zip:
             if hasattr(dados_audio, 'getvalue'): zip_file.writestr(nome_arq, dados_audio.getvalue())
@@ -299,13 +297,12 @@ if 'sessao_vistoria' not in st.session_state: st.session_state['sessao_vistoria'
 if 'fotos_temp' not in st.session_state: st.session_state['fotos_temp'] = []
 if 'obs_atual' not in st.session_state: st.session_state['obs_atual'] = ""
 if 'tipo_estabelecimento_atual' not in st.session_state: st.session_state['tipo_estabelecimento_atual'] = "🏥 Hospital / Clínica / Laboratório"
-# Controle de checkboxes
 if 'checks_temp' not in st.session_state: st.session_state['checks_temp'] = {}
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v49.1 - Correção PDF")
+    st.caption("v49.2 - Correção Final PDF")
 
 # --- TELAS ---
 if menu == "Painel Geral":
