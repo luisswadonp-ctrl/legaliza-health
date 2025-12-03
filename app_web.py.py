@@ -25,15 +25,7 @@ try:
 except ImportError:
     TEM_RECONHECIMENTO_VOZ = False
 
-# Tenta importar Plotly
-try:
-    import plotly.express as px
-    import plotly.graph_objects as go
-    TEM_PLOTLY = True
-except ImportError:
-    TEM_PLOTLY = False
-
-# --- 1. CONFIGURAÇÃO GERAL (MOBILE FIRST & DESIGN) ---
+# --- 1. CONFIGURAÇÃO GERAL (MOBILE FIRST) ---
 st.set_page_config(
     page_title="Legaliza Health", 
     page_icon="🏥", 
@@ -44,76 +36,51 @@ st.set_page_config(
 # --- CSS PREMIUM (DESIGN SYSTEM) ---
 st.markdown("""
 <style>
-    /* Importando Fonte Moderna */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
 
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
 
-    /* Fundo Geral mais limpo */
-    .stApp { 
-        background-color: #0e1117; 
-        color: #f0f2f6; 
-    }
+    /* Fundo Geral */
+    .stApp { background-color: #0e1117; color: #f0f2f6; }
     
-    /* Cards de KPI com efeito Glassmorphism */
+    /* Cards de KPI */
     div[data-testid="metric-container"] {
         background-color: rgba(31, 41, 55, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-left: 5px solid #00c853; /* Verde marca */
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-        backdrop-filter: blur( 4px );
-        -webkit-backdrop-filter: blur( 4px );
-        transition: transform 0.2s;
-    }
-    div[data-testid="metric-container"]:hover {
-        transform: translateY(-5px);
+        border-left: 5px solid #00c853;
+        padding: 15px;
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
     }
     
-    /* Botões Primários (Gradiente Moderno) */
-    div.stButton > button:first-child {
-        border-radius: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        height: 55px;
-        width: 100%;
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-        border: none;
-        color: white;
-        box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
-        transition: all 0.3s ease;
-        margin-bottom: 10px;
-    }
-    div.stButton > button:first-child:hover {
-        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6);
-        transform: scale(1.02);
-    }
-
-    /* Botões Secundários (Outline) */
-    div.stButton > button[kind="secondary"] {
-        background: transparent;
-        border: 2px solid #4b5563;
-        color: #e5e7eb;
-    }
-
-    /* Tabelas mais limpas */
-    [data-testid="stDataFrame"] { 
+    /* Botões */
+    .stButton>button {
         border-radius: 10px;
-        overflow: hidden;
-        border: 1px solid #374151;
+        font-weight: 600;
+        height: 50px;
+        width: 100%;
+        border: none;
+        transition: all 0.3s;
     }
-
-    /* Inputs e Selectbox */
-    .stTextInput > div > div > input, .stSelectbox > div > div > div {
-        border-radius: 8px;
-        border-color: #374151;
-        background-color: #1f2937;
-        color: white;
+    
+    /* Título do Menu Lateral Centralizado */
+    .sidebar-title {
+        text-align: center;
+        font-size: 24px;
+        font-weight: 800;
+        color: #00c853;
+        margin-bottom: 20px;
+        margin-top: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
+    
+    /* Progress Bar Custom */
+    .stProgress > div > div > div > div {
+        background-image: linear-gradient(to right, #00c853, #69f0ae);
+    }
+    
 </style>
 """, unsafe_allow_html=True)
 
@@ -124,86 +91,20 @@ ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 # --- 2. CÉREBRO DE INTELIGÊNCIA DINÂMICA ---
 CONTEXT_DATA = {
     "🏥 Hospital / Clínica / Laboratório": {
-        "setores": [
-            "Recepção/Acessibilidade", "Consultório Indiferenciado", "Consultório Gineco/Uro", 
-            "Sala de Procedimentos", "DML (Limpeza)", "Expurgo (Sujo)", "Esterilização (Limpo)", 
-            "Abrigo de Resíduos", "Cozinha/Copa", "Farmácia/CAF", "Raio-X/Imagem", "UTI", "Centro Cirúrgico"
-        ],
+        "setores": ["Recepção/Acessibilidade", "Consultório Indiferenciado", "Consultório Gineco/Uro", "Sala de Procedimentos", "DML (Limpeza)", "Expurgo (Sujo)", "Esterilização (Limpo)", "Abrigo de Resíduos", "Cozinha/Copa", "Farmácia/CAF", "Raio-X/Imagem", "UTI", "Centro Cirúrgico"],
         "sugestoes": {
-            "Recepção/Acessibilidade": [
-                "Balcão de atendimento sem rebaixo PNE (NBR 9050)",
-                "Sanitário PNE sem barras de apoio ou alarme de emergência",
-                "Área de giro 1.50m no sanitário PNE obstruída",
-                "Desnível de piso > 5mm sem rampa",
-                "Bebedouro não acessível (altura incorreta)"
-            ],
-            "Consultório Indiferenciado": [
-                "Ausência de lavatório para mãos (obrigatório)",
-                "Torneira com acionamento manual (exige comando não manual)",
-                "Piso/Parede com juntas ou rodapé não arredondado",
-                "Mobiliário com superfície porosa (madeira não tratada)",
-                "Lixeira sem acionamento por pedal"
-            ],
-            "DML (Limpeza)": [
-                "Tanque de lavagem único (necessário setorização)",
-                "Ausência de ralo sifonado",
-                "Armazenamento de saneantes sem estrado/pallet",
-                "Ventilação mecânica ineficiente/ausente"
-            ],
-            "Expurgo (Sujo)": [
-                "Cruzamento de fluxo limpo x sujo",
-                "Ausência de pia de lavagem profunda (vazia clínica)",
-                "Pistola de ar/água inoperante",
-                "Bancada de madeira ou material poroso"
-            ],
-            "Esterilização (Limpo)": [
-                "Autoclave sem registro de teste biológico/químico",
-                "Barreira física entre área suja/limpa inexistente",
-                "Ar condicionado sem controle de temperatura",
-                "Armazenamento de estéreis próximo ao teto/piso"
-            ],
-            "Abrigo de Resíduos": [
-                "Ausência de ponto de água e ralo",
-                "Área não telada (acesso de vetores)",
-                "Identificação de grupos (A, B, E) incorreta",
-                "Porta sem abertura para ventilação (veneziana)"
-            ],
-            "Farmácia/CAF": [
-                "Termohigrômetro não calibrado ou ausente",
-                "Armário de controlados (Port. 344) sem chave/segurança",
-                "Pallets de madeira (proibido em área limpa)",
-                "Medicamentos encostados na parede/teto"
-            ],
-            "Raio-X/Imagem": [
-                "Sinalização luminosa (luz vermelha) inoperante",
-                "Visor plumbífero com falha de vedação",
-                "Porta sem proteção radiológica (chumbo)",
-                "Ausência de sinalização 'Risco de Radiação' e 'Grávidas'"
-            ],
-            "DEFAULT": [
-                "Divergência entre Projeto (LTA) e Executado",
-                "Extintor vencido ou obstruído",
-                "Sinalização de rota de fuga fotoluminescente ausente",
-                "Iluminação de emergência inoperante",
-                "Certificado de dedetização vencido"
-            ]
+            "UTI": ["Grade do leito baixada", "Sinalização de higienização faltante", "Equipamento sem calibração", "Lixo infectante aberto"],
+            "Farmácia": ["Medicamento vencido", "Temperatura alta", "Controle psicotrópicos falho", "Umidade excessiva"],
+            "DEFAULT": ["Extintor vencido", "Sinalização de rota de fuga ausente", "Iluminação de emergência inoperante"]
         }
     },
     "🏭 Indústria / Logística": {
-        "setores": ["Linha de Produção", "Estoque/Almoxarifado", "Vestiários", "Refeitório", "Caldeiras/Compressor", "Área Externa"],
-        "sugestoes": {
-            "Linha de Produção": ["Máquinas sem proteção (NR-12)", "Área de circulação obstruída", "Painel elétrico sem tranca (NR-10)", "Iluminação insuficiente"],
-            "Estoque/Almoxarifado": ["Empilhamento excessivo", "Extintores obstruídos", "Porta-pallets danificada", "Ausência de rota de fuga"],
-            "DEFAULT": ["AVCB vencido", "Ausência de SPDA", "Descarte de efluentes irregular"]
-        }
+        "setores": ["Linha de Produção", "Estoque", "Vestiários", "Refeitório", "Caldeiras", "Externo"],
+        "sugestoes": {"DEFAULT": ["AVCB vencido", "Ausência de SPDA", "Descarte irregular"]}
     },
     "🛒 Varejo de Alimentos": {
-        "setores": ["Área de Venda", "Cozinha/Manipulação", "Estoque Seco", "Câmara Fria", "Saneantes", "Lixo"],
-        "sugestoes": {
-            "Cozinha/Manipulação": ["Fluxo cruzado", "Ausência de pia exclusiva mãos", "Ausência de tela milimétrica", "Luminárias sem proteção"],
-            "Câmara Fria": ["Temperatura alta", "Gelo acumulado", "Alimentos no chão", "Porta não veda"],
-            "DEFAULT": ["Licença Sanitária vencida", "Manual de Boas Práticas desatualizado", "Caixa d'Água suja"]
-        }
+        "setores": ["Venda", "Cozinha", "Estoque", "Câmara Fria", "Lixo"],
+        "sugestoes": {"DEFAULT": ["Licença vencida", "Boas Práticas ausente", "Caixa d'água suja"]}
     }
 }
 
@@ -213,55 +114,7 @@ DOC_INTELLIGENCE = {
     "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria", "tarefas": ["Protocolo VISA", "Manual Boas Práticas"]},
     "DEFAULT": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Verificar validade"]}
 }
-# ADICIONANDO A BASE DE CONHECIMENTO COMPLETA (Versão Sênior)
-DOC_INTELLIGENCE.update({
-    "Licença de Publicidade": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Medir fachada", "Pagar taxa TFA/Cadan", "Verificar padrão visual"]},
-    "Inscrição Municipal": {"dias": 0, "risco": "NORMAL", "link": "", "tarefas": ["Verificar cadastro mobiliário", "Atualizar dados fiscais"]},
-    "Habite-se": {"dias": 0, "risco": "CRÍTICO", "link": "", "tarefas": ["Verificar metragem construída", "Arquivar planta aprovada"]},
-    "Alvará de Obra": {"dias": 180, "risco": "ALTO", "link": "", "tarefas": ["Placa do engenheiro na obra", "ART de execução", "Manter no canteiro"]},
-    "Projeto Arquitetonico (Visa e Prefeitura)": {"dias": 0, "risco": "ALTO", "link": "", "tarefas": ["Aprovação LTA (Vigilância)", "Aprovação Prefeitura", "Memorial descritivo atualizado"]},
-    "SDR": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Regularidade regional", "Taxas estaduais"]},
-    "SMOP": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Regularidade de obras viárias", "Certificado de conclusão"]},
-    "Termo de aceite de sinalização de vaga para deficiente e idoso": {"dias": 0, "risco": "BAIXO", "link": "", "tarefas": ["Pintura de solo", "Placa vertical", "Medidas ABNT"]},
-    "Certificado de acessibilidade": {"dias": 0, "risco": "MÉDIO", "link": "", "tarefas": ["Laudo NBR 9050", "Rampas/Banheiros adaptados"]},
-    "Carta de anuência tombamento": {"dias": 0, "risco": "MÉDIO", "link": "", "tarefas": ["Verificar restrições de fachada", "Patrimônio histórico"]},
-    "Certificado de Manutenção do Sistema de Segurança": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Laudo câmeras/CFTV", "Teste alarme", "Manutenção cercas"]},
-    "Licença do Comando da Aeronáutica (COMAER)": {"dias": 1095, "risco": "ALTO", "link": "", "tarefas": ["Aprovação AGA", "Luz piloto topo prédio"]},
-    "Polícia Civil (Licença)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Relatório trimestral", "Taxa fiscalização", "Vistoria local"]},
-    "Polícia Civil (Termo de Vistoria)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Livro de registro", "Agendamento vistoria"]},
-    "Polícia Federal (Licença)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Mapas mensais (químicos)", "Renovação CRC/CLF", "Controle estoque"]},
-    "Licença Ambiental": {"dias": 1460, "risco": "MÉDIO", "link": "", "tarefas": ["Manifesto resíduos (MTR)", "PGRSS atualizado", "Renovação LO"]},
-    "Cadastro de tanques, bombas e equipamentos afins": {"dias": 1825, "risco": "ALTO", "link": "", "tarefas": ["Teste estanqueidade", "Limpeza tanques", "Licença ambiental"]},
-    "Conselho de Medicina (CRM)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Certificado Regularidade", "Lista corpo clínico", "Anuidade PJ", "Diretor Técnico"]},
-    "Conselho de Enfermagem (COREN)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["CRT (Certidão Resp. Técnica)", "Dimensionamento equipe", "Escalas assinadas"]},
-    "Conselho de Farmácia (CRF)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Certidão Regularidade", "Farmacêutico presente", "Baixa RT anterior"]},
-    "Conselho de Odontologia (CRO)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Inscrição EPAO", "Dentista RT"]},
-    "Conselho de Biomedicina (CRBM)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Registro PJ", "Biomédico RT"]},
-    "Conselho de Biologia (CRBio)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Registro PJ", "TRT emitido"]},
-    "Conselho de Nutrição (CRN)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["CRQ (Quadro Técnico)", "Manual Boas Práticas"]},
-    "Conselho de Psicologia (CRP)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Cadastro PJ", "Psicólogo RT"]},
-    "Conselho de Radiologia (CRTR)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Supervisor Proteção Radiológica", "Lista técnicos"]},
-    "Conselho de Fisioterapia e Terapia Ocupacional (CREFITO)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["DRF (Declaração Regularidade)", "Fisioterapeuta RT"]},
-    "Conselho de Fonoaudiologia (CREFONO)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Registro PJ", "Fonoaudiólogo RT"]},
-    "CNES": {"dias": 180, "risco": "CRÍTICO", "link": "https://cnes.datasus.gov.br/", "tarefas": ["Atualizar RT", "Atualizar quadro RH", "Atualizar equipamentos"]},
-    "Licença Sanitária Serviço (Laboratório)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Controle Qualidade", "Pop's analíticos", "Gerenciamento resíduos"]},
-    "Conselho de Biomedicina (CRBM) Serviço - Laboratório": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["RT Biomédico", "PNCQ", "Calibração"]},
-    "Licença Sanitária Serviço (Farmácia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Controle temperatura/umidade", "SNGPC (Controlados)", "Qualificação fornecedor"]},
-    "Licença Sanitária Serviço (Radiologia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Levantamento Radiométrico", "Testes Constância", "Dosimetria"]},
-    "Licença Sanitária Serviço (Tomografia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Programa Garantia Qualidade", "Testes aceitação", "Laudo físico"]},
-    "Licença Sanitária Serviço (Hemoterapia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Validação Rede Frio", "Ciclo do sangue", "Comitê Transfusional"]},
-    "Licença Sanitária Serviço (Hemodiálise)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Análise água", "Manutenção máquinas", "Sorologia pacientes"]},
-    "Licença Sanitária Serviço (Oncologia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Protocolos quimioterapia", "Registro câncer"]},
-    "Licença Sanitária Serviço (UTI Adulto)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Monitoramento 24h", "Equipamentos suporte", "CCIH"]},
-    "Licença Sanitária Serviço (UTI Neonatal)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Incubadoras", "Rede gases", "Área ordenha"]},
-    "Licença Sanitária Serviço (CME)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Testes autoclave", "Qualificação térmica", "Rastreabilidade"]},
-    "Licença Sanitária Serviço (Vacinas)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Rede de frio", "Gerador/Nobreak", "Registro doses"]},
-    "Licença Sanitária Serviço (Equipamento)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Plano Manutenção", "Calibração", "Teste Segurança Elétrica", "Etiqueta Validade"]},
-})
-for i in range(1, 23):
-    DOC_INTELLIGENCE[f"Licença Sanitária Serviço (Equipamento {i})"] = DOC_INTELLIGENCE["Licença Sanitária Serviço (Equipamento)"]
-
-LISTA_TIPOS_DOCUMENTOS = sorted(list(DOC_INTELLIGENCE.keys()) + ["Outros"])
+LISTA_TIPOS_DOCUMENTOS = sorted(["Alvará de Funcionamento", "Licença Sanitária", "Corpo de Bombeiros", "CNES", "CRM", "COREN", "CRF", "Licença Ambiental", "Alvará de Obra", "Habite-se", "Outros"])
 
 # --- AUTO-REFRESH ---
 components.html("""
@@ -298,13 +151,7 @@ def limpar_texto_pdf(texto):
 def aplicar_inteligencia_doc(tipo_doc, data_base=None):
     if not data_base: data_base = date.today()
     info = DOC_INTELLIGENCE.get(tipo_doc)
-    if not info:
-        for chave, dados in DOC_INTELLIGENCE.items():
-            if chave in tipo_doc:
-                info = dados
-                break
     if not info: info = DOC_INTELLIGENCE["DEFAULT"]
-    
     novo_vencimento = data_base
     if info["dias"] > 0: novo_vencimento = data_base + timedelta(days=info["dias"])
     return info["risco"], novo_vencimento, info["link"], info["tarefas"]
@@ -320,7 +167,7 @@ def adicionar_tarefas_sugeridas(df_checklist, id_doc, tarefas):
     if novas: return pd.concat([df_checklist, pd.DataFrame(novas)], ignore_index=True)
     return df_checklist
 
-# --- FUNÇÕES DE CONEXÃO E DADOS ---
+# --- FUNÇÕES DE DADOS ---
 def get_creds():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_dict = st.secrets["gcp_service_account"]
@@ -398,7 +245,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
         st.cache_data.clear()
         st.session_state['dados_cache'] = (df_prazos, df_checklist)
-        st.toast("✅ Dados Sincronizados com a Nuvem!", icon="☁️")
+        st.toast("✅ Salvo!", icon="☁️")
         return True
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
@@ -437,29 +284,6 @@ def salvar_vistoria_db(lista_itens):
         progresso.empty()
         st.toast("✅ Vistoria Registrada!", icon="☁️")
     except Exception as e: st.error(f"Erro: {e}")
-
-def salvar_historico_editado(df_editado, data_selecionada):
-    try:
-        sh = conectar_gsheets()
-        ws = sh.worksheet("Vistorias")
-        todos_dados = pd.DataFrame(ws.get_all_records())
-        todos_dados = todos_dados[todos_dados['Data'] != data_selecionada]
-        df_editado['Data'] = data_selecionada
-        todos_dados = pd.concat([todos_dados, df_editado], ignore_index=True)
-        ws.clear()
-        ws.update([todos_dados.columns.values.tolist()] + todos_dados.values.tolist())
-        st.toast("Histórico Atualizado!")
-        return True
-    except Exception as e:
-        st.error(f"Erro ao salvar histórico: {e}")
-        return False
-
-def carregar_historico_vistorias():
-    try:
-        sh = conectar_gsheets()
-        ws = sh.worksheet("Vistorias")
-        return pd.DataFrame(ws.get_all_records())
-    except: return pd.DataFrame()
 
 def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
     try:
@@ -506,6 +330,7 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     pdf.set_font("Arial", "", 11)
     pdf.multi_cell(epw, 6, f"Cliente: {limpar_texto_pdf(nome_cliente)}\nEndereco: {limpar_texto_pdf(endereco_cliente)}\nTipo: {limpar_texto_pdf(tipo_estabelecimento)}", 1)
     pdf.ln(5)
+
     total = len(itens_vistoria)
     criticos = sum(1 for i in itens_vistoria if i['Gravidade'] == 'CRÍTICO')
     pdf.set_font("Arial", "B", 12)
@@ -514,6 +339,7 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     pdf.set_font("Arial", "", 11)
     pdf.cell(epw, 8, f"Total de Apontamentos: {total} | Pontos Criticos: {criticos}", 1, 1)
     pdf.ln(5)
+
     audios_para_zip = []
     for idx, item in enumerate(itens_vistoria):
         if pdf.get_y() > 250: pdf.add_page()
@@ -564,26 +390,6 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
             else: zip_file.writestr(nome_arq, dados_audio)
     return zip_buffer.getvalue()
 
-def gerar_pdf(vistorias):
-    pdf = PDF()
-    pdf.add_page()
-    for i, item in enumerate(vistorias):
-        pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 10, f"Item #{i+1}: {limpar_txt(item.get('Item', ''))}", 0, 1)
-        pdf.set_font("Arial", size=10)
-        pdf.multi_cell(0, 6, f"Local: {limpar_txt(item.get('Setor',''))}\nObs: {limpar_txt(item.get('Obs',''))}")
-        img = None
-        if 'Foto_Binaria' in item and item['Foto_Binaria']: img = item['Foto_Binaria']
-        elif 'Foto_Link' in item and str(item['Foto_Link']).startswith('http'): img = baixar_imagem_url(item['Foto_Link'])
-        if img:
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
-                    t.write(img.getvalue() if hasattr(img, 'getvalue') else img.read())
-                    pdf.image(t.name, x=10, w=80)
-            except: pass
-        pdf.ln(5)
-    return bytes(pdf.output(dest='S'))
-
 # --- INTERFACE ---
 if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
 if 'sessao_vistoria' not in st.session_state: st.session_state['sessao_vistoria'] = []
@@ -600,8 +406,24 @@ if 'cliente_endereco' not in st.session_state: st.session_state['cliente_enderec
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
-    menu = option_menu(menu_title="Legaliza Health", options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=0)
-    st.caption("v62.0 - Design Premium")
+    
+    # TÍTULO CENTRALIZADO NO MENU
+    st.markdown("<h1 class='sidebar-title'>Legaliza Health</h1>", unsafe_allow_html=True)
+    
+    # MENU SEM "RELATÓRIOS"
+    menu = option_menu(
+        menu_title=None, 
+        options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile"], 
+        icons=["speedometer2", "folder-check", "camera-fill"], 
+        default_index=0,
+        styles={
+            "container": {"padding": "0!important", "background-color": "transparent"},
+            "icon": {"color": "#00c853", "font-size": "18px"},
+            "nav-link": {"font-size": "16px", "text-align": "left", "margin":"5px", "--hover-color": "#262730"},
+            "nav-link-selected": {"background-color": "#1f2937"},
+        }
+    )
+    st.caption("v64.0 - Clean & Mobile")
 
 # --- ROBÔ ---
 try:
@@ -643,23 +465,55 @@ if menu == "Painel Geral":
         st.warning("Ainda não há documentos cadastrados. Adicione na aba 'Gestão de Docs'.")
         st.stop()
     
-    # KPIS SIMPLIFICADOS (DESIGN CLEAN)
+    # --- KPIS ---
     n_crit = len(df_p[df_p['Status'] == 'CRÍTICO'])
     n_alto = len(df_p[df_p['Status'] == 'ALTO'])
-    n_norm = len(df_p[df_p['Status'] == 'NORMAL'])
     
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
-    if c3.button(f"🟢 NORMAL: {n_norm}", use_container_width=True): st.session_state['filtro_dash'] = "NORMAL"
-    if c4.button(f"📋 TOTAL: {len(df_p)}", use_container_width=True): st.session_state['filtro_dash'] = "TODOS"
+    if c3.button(f"📋 TOTAL: {len(df_p)}", use_container_width=True): st.session_state['filtro_dash'] = "TODOS"
+    
+    # Indicador de Saúde Global
+    media_prog = int(df_p['Progresso'].mean())
+    c4.metric("Saúde Geral", f"{media_prog}%", delta="Estável" if media_prog > 70 else "-Atenção", delta_color="normal" if media_prog > 70 else "inverse")
+
+    st.markdown("---")
+    
+    # --- PANORAMA (NOVO VISUAL SEM GRÁFICOS) ---
+    st.subheader("Panorama Geral")
+    
+    # 1. Indicador de Saúde Visual
+    if media_prog < 50:
+        st.error(f"🚨 Saúde Geral Crítica: {media_prog}% de Conformidade")
+    elif media_prog < 80:
+        st.warning(f"⚠️ Saúde Geral em Alerta: {media_prog}% de Conformidade")
+    else:
+        st.success(f"✅ Saúde Geral Boa: {media_prog}% de Conformidade")
+    st.progress(media_prog)
     
     st.markdown("---")
     
-    # LISTA RÁPIDA
+    # 2. Lista de Saúde das Unidades (Barras de Progresso)
+    st.write("🏥 **Status por Unidade**")
+    unidades = df_p.groupby('Unidade')['Progresso'].mean().sort_values()
+    
+    for un, prog in unidades.items():
+        p_val = int(prog)
+        icon = "🔴" if p_val < 50 else "🟠" if p_val < 80 else "🟢"
+        
+        with st.container(border=True):
+            c_u1, c_u2 = st.columns([3, 1])
+            c_u1.write(f"**{icon} {un}**")
+            c_u1.progress(p_val)
+            c_u2.metric("Conformidade", f"{p_val}%", label_visibility="collapsed")
+
+    # 3. Lista de Processos (Abaixo)
+    st.markdown("---")
     busca_painel = st.text_input("🔎 Buscar Unidade/Documento", placeholder="Ex: gravatai, crm, alvara...")
     f_atual = st.session_state['filtro_dash']
-    st.subheader(f"Lista de Processos: {f_atual}")
+    
+    st.subheader(f"Lista Detalhada: {f_atual}")
     df_show = df_p.copy()
     if f_atual != "TODOS": df_show = df_show[df_show['Status'] == f_atual]
     if busca_painel:
@@ -668,19 +522,6 @@ if menu == "Painel Geral":
     if not df_show.empty:
         st.dataframe(df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], use_container_width=True, hide_index=True, column_config={"Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"), "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"), "Status": st.column_config.TextColumn("Risco", width="small")})
     else: st.info("Nenhum item encontrado.")
-    
-    st.markdown("---")
-    
-    # PANORAMA SIMPLIFICADO
-    st.subheader("Panorama")
-    if not df_p.empty and TEM_PLOTLY:
-        status_counts = df_p['Status'].value_counts()
-        fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6, color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
-        fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
-        st.plotly_chart(fig, use_container_width=True)
-        media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
-        st.metric("Progressão Geral", f"{media}%")
-        st.progress(media)
 
 elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
@@ -976,58 +817,3 @@ elif menu == "Vistoria Mobile":
             st.download_button(label="📥 BAIXAR RELATÓRIO FINAL (ZIP)", data=zip_data, file_name=nome_zip, mime="application/zip", type="primary", use_container_width=True)
             if st.button("Limpar Tudo e Começar Novo", type="secondary", use_container_width=True):
                 st.session_state['sessao_vistoria'] = []; st.rerun()
-
-elif menu == "Relatórios":
-    st.title("📊 Dashboard & Relatórios")
-    tab_dash, tab_audit_db = st.tabs(["🚀 BI Inteligente", "📂 Banco de Dados"])
-    with tab_dash:
-        df_docs, _ = get_dados()
-        df_audits = carregar_historico_vistorias()
-        df_mobile_temp = pd.DataFrame(st.session_state['sessao_vistoria'])
-        if not df_mobile_temp.empty:
-            df_mobile_temp = df_mobile_temp.rename(columns={'Local': 'Setor', 'Gravidade': 'Status'})
-        
-        k1, k2, k3, k4 = st.columns(4)
-        n_crit = len(df_docs[df_docs['Status'] == 'CRÍTICO']) if not df_docs.empty else 0
-        k1.metric("Docs Críticos", n_crit, delta="Atenção!" if n_crit > 0 else "Ok", delta_color="inverse")
-        media_prog = int(df_docs['Progresso'].mean()) if not df_docs.empty else 0
-        k2.metric("Conformidade Docs", f"{media_prog}%")
-        total_vistorias = (len(df_audits) if not df_audits.empty else 0) + len(df_mobile_temp)
-        k3.metric("Apontamentos (Total)", total_vistorias)
-        vencidos = 0
-        if not df_docs.empty:
-            hoje = date.today()
-            df_docs['Vencimento_dt'] = pd.to_datetime(df_docs['Vencimento'], dayfirst=True, errors='coerce').dt.date
-            vencidos = len(df_docs[df_docs['Vencimento_dt'] < hoje])
-        k4.metric("Docs Vencidos", vencidos, delta="-Ação Imediata" if vencidos > 0 else "Ok", delta_color="inverse")
-        st.markdown("---")
-        if TEM_PLOTLY:
-            c_g1, c_g2 = st.columns(2)
-            # GRÁFICO 1: TIMELINE DE VENCIMENTOS
-            if not df_docs.empty:
-                df_timeline = df_docs[df_docs['Vencimento_dt'].notna()].copy()
-                df_timeline['Mes'] = df_timeline['Vencimento_dt'].dt.to_period('M').astype(str)
-                vencimentos = df_timeline.groupby('Mes').size().reset_index(name='Docs')
-                fig_time = px.bar(vencimentos.sort_values('Mes'), x='Mes', y='Docs', title="📅 Cronograma de Vencimentos", color='Docs', color_continuous_scale='Reds')
-                c_g1.plotly_chart(fig_time, use_container_width=True)
-            
-            # GRÁFICO 2: MATRIZ DE URGÊNCIA
-            if not df_docs.empty:
-                hoje = pd.to_datetime('today')
-                df_docs['Dias_Restantes'] = (df_docs['Vencimento_dt'] - hoje).dt.days
-                df_pend = df_docs[df_docs['Progresso'] < 100]
-                if not df_pend.empty:
-                    fig_scat = px.scatter(df_pend, x='Dias_Restantes', y='Progresso', color='Status', title="🚨 Matriz de Urgência", color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
-                    fig_scat.add_vline(x=0, line_dash="dash", line_color="red")
-                    c_g2.plotly_chart(fig_scat, use_container_width=True)
-
-    with tab_audit_db:
-        st.info("Edição de dados brutos salvos na nuvem.")
-        if not df_audits.empty:
-            sel = st.selectbox("Filtrar por Data:", ["Todas"] + sorted(list(df_audits['Data'].unique()), reverse=True))
-            df_f = df_audits if sel == "Todas" else df_audits[df_audits['Data'] == sel]
-            st.dataframe(df_f, use_container_width=True)
-            with st.expander("✏️ Editar Registros (Avançado)"):
-                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True)
-                if st.button("💾 Salvar Edição na Nuvem"):
-                    salvar_historico_editado(df_edited, sel if sel != "Todas" else df_audits['Data'].iloc[0])
