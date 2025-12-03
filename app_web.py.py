@@ -168,7 +168,10 @@ def normalizar_texto(texto):
 def limpar_texto_pdf(texto):
     if texto is None: return ""
     texto = str(texto)
-    texto = texto.replace("✅", "[OK]").replace("❌", "[NC]").replace("⚠️", "[!]")
+    # Garante que caracteres especiais não quebrem o PDF
+    texto = texto.replace("✅", "[OK]").replace("❌", "[NC]").replace("⚠️", "[ATENCAO]")
+    texto = texto.replace("â", "a").replace("ã", "a").replace("á", "a").replace("ç", "c")
+    texto = texto.replace("ê", "e").replace("é", "e").replace("í", "i").replace("ó", "o").replace("õ", "o").replace("ú", "u")
     return texto.encode('latin-1', 'replace').decode('latin-1')
 
 def aplicar_inteligencia_doc(tipo_doc, data_base=None):
@@ -190,147 +193,7 @@ def adicionar_tarefas_sugeridas(df_checklist, id_doc, tarefas):
     if novas: return pd.concat([df_checklist, pd.DataFrame(novas)], ignore_index=True)
     return df_checklist
 
-def get_creds():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds_dict = st.secrets["gcp_service_account"]
-    return ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-
-def conectar_gsheets():
-    creds = get_creds()
-    client = gspread.authorize(creds)
-    return client.open("LegalizaHealth_DB")
-
-def upload_foto_drive(foto_binaria, nome_arquivo):
-    if not ID_PASTA_DRIVE: return ""
-    try:
-        creds = get_creds()
-        service = build('drive', 'v3', credentials=creds)
-        file_metadata = {'name': nome_arquivo, 'parents': [ID_PASTA_DRIVE]}
-        media = MediaIoBaseUpload(foto_binaria, mimetype='image/jpeg')
-        file = service.files().create(body=file_metadata, media_body=media, fields='id, webContentLink').execute()
-        return file.get('webContentLink', '')
-    except Exception as e:
-        st.error(f"Erro Drive: {e}")
-        return ""
-
-def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
-    try:
-        requests.post(f"https://ntfy.sh/{TOPICO_NOTIFICACAO}",
-                      data=mensagem.encode('utf-8'),
-                      headers={"Title": titulo.encode('utf-8'), "Priority": prioridade, "Tags": "hospital"})
-        return True
-    except: return False
-
-@st.cache_data(ttl=60)
-def carregar_tudo_inicial():
-    try:
-        sh = conectar_gsheets()
-        ws_prazos = sh.worksheet("Prazos")
-        df_prazos = pd.DataFrame(ws_prazos.get_all_records())
-        try:
-            ws_check = sh.worksheet("Checklist_Itens")
-            df_check = pd.DataFrame(ws_check.get_all_records())
-        except:
-            ws_check = sh.add_worksheet("Checklist_Itens", 1000, 5)
-            ws_check.append_row(["Documento_Ref", "Tarefa", "Feito"])
-            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
-
-        colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
-        for c in colunas:
-            if c not in df_prazos.columns: df_prazos[c] = ""
-            
-        if not df_prazos.empty:
-            df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
-            for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ']:
-                df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
-            for c_date in ['Vencimento', 'Data_Recebimento']:
-                df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
-            df_prazos = df_prazos[df_prazos['Unidade'] != ""]
-            df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
-        
-        if df_check.empty: df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
-        else:
-            df_check['Documento_Ref'] = df_check['Documento_Ref'].astype(str)
-            df_check = df_check[df_check['Tarefa'] != ""]
-        return df_prazos, df_check
-    except Exception as e:
-        return pd.DataFrame(), pd.DataFrame()
-
-def get_dados():
-    if 'dados_cache' not in st.session_state or st.session_state['dados_cache'] is None:
-        st.session_state['dados_cache'] = carregar_tudo_inicial()
-    return st.session_state['dados_cache']
-
-def update_dados_local(df_p, df_c):
-    st.session_state['dados_cache'] = (df_p, df_c)
-
-def salvar_alteracoes_completo(df_prazos, df_checklist):
-    try:
-        sh = conectar_gsheets()
-        ws_prazos = sh.worksheet("Prazos")
-        ws_prazos.clear()
-        df_p = df_prazos.copy()
-        if 'ID_UNICO' in df_p.columns: df_p = df_p.drop(columns=['ID_UNICO'])
-        for c_date in ['Vencimento', 'Data_Recebimento']:
-            df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
-        df_p['Concluido'] = df_p['Concluido'].astype(str)
-        df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
-        colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
-        for c in colunas_ordem: 
-            if c not in df_p.columns: df_p[c] = ""
-        df_p = df_p[colunas_ordem]
-        ws_prazos.update([df_p.columns.values.tolist()] + df_p.values.tolist())
-        
-        ws_check = sh.worksheet("Checklist_Itens")
-        ws_check.clear()
-        df_c = df_checklist.copy()
-        df_c['Feito'] = df_c['Feito'].astype(str)
-        ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
-        st.cache_data.clear()
-        st.session_state['dados_cache'] = (df_prazos, df_checklist)
-        st.toast("✅ Dados Sincronizados com a Nuvem!", icon="☁️")
-        return True
-    except Exception as e:
-        st.error(f"Erro ao salvar: {e}")
-        return False
-
-def salvar_vistoria_db(lista_itens):
-    try:
-        sh = conectar_gsheets()
-        try: ws = sh.worksheet("Vistorias")
-        except: ws = sh.add_worksheet("Vistorias", 1000, 10)
-        header = ws.row_values(1)
-        if "Foto_Link" not in header: ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data", "Foto_Link"])
-        hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y")
-        progresso = st.progress(0, text="Salvando fotos...")
-        for i, item in enumerate(lista_itens):
-            link_foto = ""
-            if item.get('Foto_Binaria'):
-                nome_arq = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
-                item['Foto_Binaria'].seek(0)
-                link_foto = upload_foto_drive(item['Foto_Binaria'], nome_arq)
-            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link_foto if link_foto else "FALHA_UPLOAD"])
-            progresso.progress((i + 1) / len(lista_itens))
-        progresso.empty()
-        st.toast("✅ Vistoria Registrada!", icon="☁️")
-    except Exception as e: st.error(f"Erro: {e}")
-
-def salvar_historico_editado(df_editado, data_selecionada):
-    try:
-        sh = conectar_gsheets()
-        ws = sh.worksheet("Vistorias")
-        todos_dados = pd.DataFrame(ws.get_all_records())
-        todos_dados = todos_dados[todos_dados['Data'] != data_selecionada]
-        df_editado['Data'] = data_selecionada
-        todos_dados = pd.concat([todos_dados, df_editado], ignore_index=True)
-        ws.clear()
-        ws.update([todos_dados.columns.values.tolist()] + todos_dados.values.tolist())
-        st.toast("Histórico Atualizado!")
-        return True
-    except Exception as e:
-        st.error(f"Erro ao salvar histórico: {e}")
-        return False
-
+# --- FUNÇÃO DE TRANSCRIÇÃO ---
 def transcrever_audio(audio_file):
     if not TEM_RECONHECIMENTO_VOZ: return "Erro: Biblioteca não instalada."
     r = sr.Recognizer()
@@ -345,10 +208,11 @@ def transcrever_audio(audio_file):
         return texto
     except: return ""
 
+# --- GERADOR DE ZIP (PDF ARRANJADO) ---
 class RelatorioPDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 14)
-        self.cell(0, 10, 'Relatorio de Vistoria Tecnica - Legalizacao', 0, 1, 'C')
+        self.cell(0, 10, 'Relatorio Tecnico - Legalizacao', 0, 1, 'C')
         self.set_font('Arial', 'I', 10)
         self.cell(0, 10, f'Data: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
         self.ln(5)
@@ -357,39 +221,65 @@ class RelatorioPDF(FPDF):
         self.set_font('Arial', 'I', 8)
         self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
 
-def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
+def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente, endereco_cliente):
     pdf = RelatorioPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 12)
+    
+    # Define largura efetiva da página
     epw = pdf.w - 2*pdf.l_margin 
+    
+    # --- CABEÇALHO DO CLIENTE ---
+    pdf.set_fill_color(220, 220, 220)
+    pdf.cell(epw, 10, "DADOS DO CLIENTE / UNIDADE", 1, 1, 'L', fill=True)
+    pdf.set_font("Arial", "", 11)
+    pdf.multi_cell(epw, 6, f"Cliente: {limpar_texto_pdf(nome_cliente)}\nEndereco: {limpar_texto_pdf(endereco_cliente)}\nTipo: {limpar_texto_pdf(tipo_estabelecimento)}", 1)
+    pdf.ln(5)
+
     total = len(itens_vistoria)
     criticos = sum(1 for i in itens_vistoria if i['Gravidade'] == 'CRÍTICO')
+    
+    pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(0, 10, f"Resumo - {limpar_texto_pdf(tipo_estabelecimento)}", 1, 1, 'L', fill=True)
+    pdf.cell(epw, 10, "RESUMO EXECUTIVO", 1, 1, 'L', fill=True)
     pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 8, f"Total de Apontamentos: {total} | Pontos Criticos: {criticos}", 0, 1)
+    pdf.cell(epw, 8, f"Total de Apontamentos: {total} | Pontos Criticos: {criticos}", 1, 1)
     pdf.ln(5)
+
     audios_para_zip = []
+
     for idx, item in enumerate(itens_vistoria):
         if pdf.get_y() > 250: pdf.add_page()
+        
+        # Cores de Fundo por Gravidade
         if item['Gravidade'] == 'CRÍTICO': pdf.set_fill_color(255, 200, 200)
         elif item['Gravidade'] == 'Alto': pdf.set_fill_color(255, 230, 200)
         else: pdf.set_fill_color(230, 255, 230)
+        
         local_safe = limpar_texto_pdf(item['Local'])
         item_safe = limpar_texto_pdf(item['Item'])
         obs_safe = limpar_texto_pdf(item['Obs'])
+        
+        # Bloco de Título
         pdf.set_font("Arial", "B", 11)
-        pdf.multi_cell(epw, 8, f"#{idx+1} - {local_safe}", 1, 'L', fill=True)
+        pdf.cell(epw, 8, f"#{idx+1} - {local_safe}", 1, 1, 'L', fill=True)
+        
+        # Bloco de NC (Quebra de linha ativada e altura ajustada)
         pdf.set_font("Arial", "B", 10)
-        pdf.multi_cell(epw, 6, f"NC Identificada: {item_safe}")
+        pdf.multi_cell(epw, 6, f"NC Identificada: {item_safe}", 1, 'L')
+        
         pdf.set_font("Arial", "", 10)
         info_extra = ""
         if item.get('Audio_Bytes'):
             nome_audio = f"Audio_Item_{idx+1}.wav"
             audios_para_zip.append((nome_audio, item['Audio_Bytes']))
             info_extra = f" [AUDIO ANEXO: {nome_audio}]"
-        pdf.multi_cell(epw, 6, f"Status: {limpar_texto_pdf(item['Situação'])}\nGravidade: {limpar_texto_pdf(item['Gravidade'])}\nTecnica: {obs_safe}{info_extra}")
+
+        # Bloco de Detalhes
+        pdf.multi_cell(epw, 6, f"Status: {limpar_texto_pdf(item['Situação'])}\nGravidade: {limpar_texto_pdf(item['Gravidade'])}\nTecnica: {obs_safe}{info_extra}", 1, 'L')
         pdf.ln(2)
+        
+        # Fotos
         if item['Fotos']:
             x_start = 10; y_start = pdf.get_y(); img_w = 45; img_h = 45
             for i, foto_bytes in enumerate(item['Fotos']):
@@ -403,8 +293,11 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
                     x_start += img_w + 5; os.unlink(temp_path)
                 except: pass
             pdf.set_y(y_start + img_h + 10)
-        else: pdf.ln(5)
+        else: pdf.ln(2)
+        
+        # Linha separadora
         pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(5)
+
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         pdf_bytes = pdf.output() 
@@ -412,6 +305,7 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
         for nome_arq, dados_audio in audios_para_zip:
             if hasattr(dados_audio, 'getvalue'): zip_file.writestr(nome_arq, dados_audio.getvalue())
             else: zip_file.writestr(nome_arq, dados_audio)
+                
     return zip_buffer.getvalue()
 
 def gerar_pdf(vistorias):
@@ -446,10 +340,14 @@ if 'last_notify_alto' not in st.session_state: st.session_state['last_notify_alt
 if 'doc_focado_id' not in st.session_state: st.session_state['doc_focado_id'] = None
 if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TODOS"
 
+# --- VARIÁVEIS DO CLIENTE (Persistentes) ---
+if 'cliente_nome' not in st.session_state: st.session_state['cliente_nome'] = ""
+if 'cliente_endereco' not in st.session_state: st.session_state['cliente_endereco'] = ""
+
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v50.0 - Integração Total")
+    st.caption("v51.0 - PDF Perfeito & Cabeçalho")
 
 # --- ROBÔ ---
 try:
@@ -725,7 +623,22 @@ elif menu == "Gestão de Docs":
 
 elif menu == "Vistoria Mobile":
     st.title("📋 Vistoria Técnica")
-    st.write("📍 **Contexto da Vistoria**")
+    
+    # --- NOVO: CABEÇALHO DO RELATÓRIO ---
+    st.write("📍 **Cabeçalho do Relatório**")
+    with st.container(border=True):
+        c_cli, c_end = st.columns(2)
+        cliente_val = st.session_state.get('cliente_nome', "")
+        cliente = c_cli.text_input("Nome da Unidade/Cliente", value=cliente_val, placeholder="Ex: Hospital Santa Cruz")
+        
+        endereco_val = st.session_state.get('cliente_endereco', "")
+        endereco = c_end.text_input("Cidade / Endereço", value=endereco_val, placeholder="Ex: São Paulo - SP")
+        
+        # Atualiza sessão
+        if cliente != st.session_state['cliente_nome']: st.session_state['cliente_nome'] = cliente
+        if endereco != st.session_state['cliente_endereco']: st.session_state['cliente_endereco'] = endereco
+
+    st.write("⚙️ **Contexto**")
     if st.session_state['tipo_estabelecimento_atual'] not in CONTEXT_DATA.keys():
         st.session_state['tipo_estabelecimento_atual'] = list(CONTEXT_DATA.keys())[0]
     tipo_estab = st.selectbox("Tipo de Estabelecimento", options=list(CONTEXT_DATA.keys()), index=list(CONTEXT_DATA.keys()).index(st.session_state['tipo_estabelecimento_atual']))
@@ -801,34 +714,19 @@ elif menu == "Vistoria Mobile":
                     if c_b.button("🗑️", key=f"del_{i}"):
                         st.session_state['sessao_vistoria'].pop(i); st.rerun()
             st.markdown("---")
-            zip_data = gerar_pacote_zip_completo(st.session_state['sessao_vistoria'], st.session_state['tipo_estabelecimento_atual'])
+            
+            # GERA PDF COM CABEÇALHO DO CLIENTE
+            zip_data = gerar_pacote_zip_completo(
+                st.session_state['sessao_vistoria'], 
+                st.session_state['tipo_estabelecimento_atual'],
+                st.session_state['cliente_nome'],
+                st.session_state['cliente_endereco']
+            )
             nome_zip = f"Relatorio_Legalizacao_{limpar_texto_pdf(st.session_state['tipo_estabelecimento_atual'])}_{datetime.now().strftime('%d-%m-%H%M')}.zip"
             st.download_button(label="📥 BAIXAR RELATÓRIO FINAL (ZIP)", data=zip_data, file_name=nome_zip, mime="application/zip", type="primary", use_container_width=True)
             if st.button("Limpar Tudo e Começar Novo", type="secondary", use_container_width=True):
                 st.session_state['sessao_vistoria'] = []; st.rerun()
 
 elif menu == "Relatórios":
-    st.title("Relatórios")
-    tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
-    with tab1:
-        if st.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
-        if len(st.session_state['vistorias']) > 0:
-            pdf = gerar_pdf(st.session_state['vistorias'])
-            st.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
-    with tab2:
-        try:
-            sh = conectar_gsheets()
-            ws = sh.worksheet("Vistorias")
-            df_h = pd.DataFrame(ws.get_all_records())
-            if not df_h.empty:
-                sel = st.selectbox("Data:", df_h['Data'].unique())
-                df_f = df_h[df_h['Data'] == sel]
-                st.info("Edite ou exclua linhas abaixo e clique em Salvar Correções.")
-                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
-                c_save, c_down = st.columns(2)
-                if c_save.button("💾 Salvar Correções no Histórico"):
-                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
-                if c_down.button(f"📥 Baixar PDF"):
-                    pdf = gerar_pdf(df_f.to_dict('records'))
-                    st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
-        except: st.error("Sem histórico.")
+    st.title("Histórico de Relatórios")
+    st.info("Aqui você pode consultar relatórios antigos salvos no Banco de Dados.")
