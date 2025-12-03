@@ -96,14 +96,14 @@ st.markdown("""
     /* Título do Menu Centralizado */
     .sidebar-title {
         text-align: center;
-        font-size: 22px;
+        font-size: 24px;
         font-weight: 800;
         color: #10b981; /* Verde Tech */
-        margin-top: 20px;
+        margin-top: 30px;
         margin-bottom: 20px;
         text-transform: uppercase;
         letter-spacing: 1.5px;
-        text-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+        text-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
     }
 
     /* Inputs e Selectbox */
@@ -289,15 +289,12 @@ def normalizar_texto(texto):
     if texto is None: return ""
     return ''.join(c for c in unicodedata.normalize('NFKD', str(texto)) if unicodedata.category(c) != 'Mn').lower()
 
-# --- LIMPEZA DE TEXTO CORRIGIDA (REMOVE EMOJIS DO TÍTULO) ---
 def limpar_texto_pdf(texto):
     if texto is None: return ""
     texto = str(texto)
-    # Remove emojis e caracteres especiais
-    texto = texto.replace("✅", "[OK]").replace("❌", "[NC]").replace("⚠️", "[ATENCAO]")
-    texto = texto.replace("🏥", "").replace("🏭", "").replace("🛒", "")
-    texto = texto.replace("â", "a").replace("ã", "a").replace("á", "a").replace("ç", "c")
-    texto = texto.replace("ê", "e").replace("é", "e").replace("í", "i").replace("ó", "o").replace("õ", "o").replace("ú", "u")
+    # Limpa emojis para não quebrar PDF
+    texto = texto.replace("✅", "[OK]").replace("❌", "[NC]").replace("⚠️", "[!]")
+    texto = texto.replace("🏥", "").replace("🏭", "").replace("🛒", "").replace("🏫", "")
     return texto.encode('latin-1', 'replace').decode('latin-1')
 
 def aplicar_inteligencia_doc(tipo_doc, data_base=None):
@@ -403,7 +400,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
         st.cache_data.clear()
         st.session_state['dados_cache'] = (df_prazos, df_checklist)
-        st.toast("✅ Salvo!", icon="☁️")
+        st.toast("✅ Dados Sincronizados com a Nuvem!", icon="☁️")
         return True
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
@@ -421,6 +418,10 @@ def upload_foto_drive(foto_binaria, nome_arquivo):
     except Exception as e:
         st.error(f"Erro Drive: {e}")
         return ""
+
+def salvar_vistoria_db(lista_itens):
+    # Função mantida para compatibilidade futura, mas o foco agora é PDF local
+    pass
 
 def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
     try:
@@ -480,29 +481,36 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     audios_para_zip = []
     for idx, item in enumerate(itens_vistoria):
         if pdf.get_y() > 250: pdf.add_page()
+        
         if item['Gravidade'] == 'CRÍTICO': pdf.set_fill_color(255, 200, 200)
         elif item['Gravidade'] == 'Alto': pdf.set_fill_color(255, 230, 200)
         else: pdf.set_fill_color(230, 255, 230)
+        
         local_safe = limpar_texto_pdf(item['Local'])
         item_safe = limpar_texto_pdf(item['Item'])
         obs_safe = limpar_texto_pdf(item['Obs'])
+        
         pdf.set_font("Arial", "B", 11)
         pdf.multi_cell(epw, 8, f"#{idx+1} - {local_safe}", 1, 'L', fill=True)
         pdf.set_font("Arial", "B", 10)
         pdf.set_x(pdf.l_margin)
         pdf.multi_cell(epw, 6, f"NC Identificada: {item_safe}", 1, 'L')
+        
         pdf.set_font("Arial", "", 10)
         pdf.set_x(pdf.l_margin) 
         pdf.cell(epw/2, 6, f"Status: {limpar_texto_pdf(item['Situação'])}", 1, 0, 'L')
         pdf.cell(epw/2, 6, f"Risco: {limpar_texto_pdf(item['Gravidade'])}", 1, 1, 'L')
+        
         info_extra = ""
         if item.get('Audio_Bytes'):
             nome_audio = f"Audio_Item_{idx+1}.wav"
             audios_para_zip.append((nome_audio, item['Audio_Bytes']))
             info_extra = f" [AUDIO ANEXO: {nome_audio}]"
+            
         pdf.set_x(pdf.l_margin)
         pdf.multi_cell(epw, 6, f"Nota Tecnica: {obs_safe}{info_extra}", 1, 'L')
         pdf.ln(2)
+        
         if item['Fotos']:
             x_start = 10; y_start = pdf.get_y(); img_w = 45; img_h = 45
             for i, foto_bytes in enumerate(item['Fotos']):
@@ -518,6 +526,7 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
             pdf.set_y(y_start + img_h + 10)
         else: pdf.ln(2)
         pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(5)
+        
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         pdf_bytes = pdf.output() 
@@ -544,10 +553,8 @@ if 'cliente_endereco' not in st.session_state: st.session_state['cliente_enderec
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     
-    # TÍTULO CENTRALIZADO NO MENU
     st.markdown("<h1 class='sidebar-title'>Legaliza Health</h1>", unsafe_allow_html=True)
     
-    # MENU SEM A OPÇÃO RELATÓRIOS
     menu = option_menu(
         menu_title=None, 
         options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile"], 
@@ -560,7 +567,7 @@ with st.sidebar:
             "nav-link-selected": {"background-color": "#1f2937"},
         }
     )
-    st.caption("v65.0 - Redesign Final")
+    st.caption("v66.0 - Versão Final Premium")
 
 # --- ROBÔ ---
 try:
@@ -601,9 +608,11 @@ if menu == "Painel Geral":
     if df_p.empty:
         st.warning("Ainda não há documentos cadastrados. Adicione na aba 'Gestão de Docs'.")
         st.stop()
-    n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
-    n_alto = len(df_p[df_p['Status'] == "ALTO"])
-    n_norm = len(df_p[df_p['Status'] == "NORMAL"])
+    
+    # KPIS
+    n_crit = len(df_p[df_p['Status'] == 'CRÍTICO'])
+    n_alto = len(df_p[df_p['Status'] == 'ALTO'])
+    n_norm = len(df_p[df_p['Status'] == 'NORMAL'])
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
@@ -815,6 +824,8 @@ elif menu == "Gestão de Docs":
                         update_dados_local(df_prazos, df_checklist)
                         st.rerun()
                 if not df_t.empty:
+                    # DICA: Para excluir tarefas, adicionei uma instrução clara
+                    st.caption("ℹ️ Para excluir: Selecione a linha e pressione Delete no teclado.")
                     edited = st.data_editor(df_t, num_rows="dynamic", use_container_width=True, hide_index=True, column_config={"Documento_Ref": None, "Tarefa": st.column_config.TextColumn("Descrição", width="medium"), "Feito": st.column_config.CheckboxColumn("OK", width="small")}, key=f"ed_{doc_ativo_id}")
                     tot = len(edited); done = edited['Feito'].sum(); new_p = int((done/tot)*100) if tot > 0 else 0
                     prog_bar_placeholder.progress(new_p, text=f"Progressão: {new_p}%")
