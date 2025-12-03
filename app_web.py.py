@@ -190,7 +190,7 @@ def adicionar_tarefas_sugeridas(df_checklist, id_doc, tarefas):
     if novas: return pd.concat([df_checklist, pd.DataFrame(novas)], ignore_index=True)
     return df_checklist
 
-# --- FUNÇÕES DE DADOS ---
+# --- FUNÇÕES DE CONEXÃO E DADOS ---
 def get_creds():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_dict = st.secrets["gcp_service_account"]
@@ -268,7 +268,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
         st.cache_data.clear()
         st.session_state['dados_cache'] = (df_prazos, df_checklist)
-        st.toast("✅ Salvo!", icon="☁️")
+        st.toast("✅ Dados Sincronizados com a Nuvem!", icon="☁️")
         return True
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
@@ -391,30 +391,32 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
         item_safe = limpar_texto_pdf(item['Item'])
         obs_safe = limpar_texto_pdf(item['Obs'])
         
-        # TÍTULO E NC (LARGURA TOTAL - EVITA CORTES)
+        # TÍTULO E NC (LARGURA TOTAL)
         pdf.set_font("Arial", "B", 11)
-        pdf.cell(epw, 8, f"#{idx+1} - {local_safe}", 1, 1, 'L', fill=True)
+        pdf.multi_cell(epw, 8, f"#{idx+1} - {local_safe}", 1, 'L', fill=True)
         
         pdf.set_font("Arial", "B", 10)
-        # Multi-cell para permitir quebra de linha se a descrição da NC for longa
+        # RESET DE CURSOR PARA GARANTIR ALINHAMENTO
+        pdf.set_x(pdf.l_margin)
         pdf.multi_cell(epw, 6, f"NC Identificada: {item_safe}", 1, 'L')
         
-        # STATUS E RISCO (LADO A LADO - GRID 50/50)
+        # STATUS E RISCO (LADO A LADO)
         pdf.set_font("Arial", "", 10)
-        y_atual = pdf.get_y()
+        pdf.set_x(pdf.l_margin) # Garante que começa na margem esquerda
         
-        # Coluna 1: Status
+        # Coluna 1
         pdf.cell(epw/2, 6, f"Status: {limpar_texto_pdf(item['Situação'])}", 1, 0, 'L')
-        # Coluna 2: Gravidade
-        pdf.cell(epw/2, 6, f"Risco: {limpar_texto_pdf(item['Gravidade'])}", 1, 1, 'L') # 1 no final para quebrar linha
+        # Coluna 2
+        pdf.cell(epw/2, 6, f"Risco: {limpar_texto_pdf(item['Gravidade'])}", 1, 1, 'L')
         
-        # DETALHES TÉCNICOS (LINHA COMPLETA EM BAIXO)
+        # NOTA TÉCNICA
         info_extra = ""
         if item.get('Audio_Bytes'):
             nome_audio = f"Audio_Item_{idx+1}.wav"
             audios_para_zip.append((nome_audio, item['Audio_Bytes']))
             info_extra = f" [AUDIO ANEXO: {nome_audio}]"
             
+        pdf.set_x(pdf.l_margin)
         pdf.multi_cell(epw, 6, f"Nota Tecnica: {obs_safe}{info_extra}", 1, 'L')
         pdf.ln(2)
         
@@ -480,7 +482,7 @@ if 'cliente_endereco' not in st.session_state: st.session_state['cliente_enderec
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v53.0 - PDF Layout Grid")
+    st.caption("v54.0 - PDF Alinhado")
 
 # --- ROBÔ ---
 try:
@@ -848,5 +850,27 @@ elif menu == "Vistoria Mobile":
                 st.session_state['sessao_vistoria'] = []; st.rerun()
 
 elif menu == "Relatórios":
-    st.title("Histórico de Relatórios")
-    st.info("Aqui você pode consultar relatórios antigos salvos no Banco de Dados.")
+    st.title("Relatórios")
+    tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
+    with tab1:
+        if st.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
+        if len(st.session_state['vistorias']) > 0:
+            pdf = gerar_pdf(st.session_state['vistorias'])
+            st.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
+    with tab2:
+        try:
+            sh = conectar_gsheets()
+            ws = sh.worksheet("Vistorias")
+            df_h = pd.DataFrame(ws.get_all_records())
+            if not df_h.empty:
+                sel = st.selectbox("Data:", df_h['Data'].unique())
+                df_f = df_h[df_h['Data'] == sel]
+                st.info("Edite ou exclua linhas abaixo e clique em Salvar Correções.")
+                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
+                c_save, c_down = st.columns(2)
+                if c_save.button("💾 Salvar Correções no Histórico"):
+                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
+                if c_down.button(f"📥 Baixar PDF"):
+                    pdf = gerar_pdf(df_f.to_dict('records'))
+                    st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
+        except: st.error("Sem histórico.")
