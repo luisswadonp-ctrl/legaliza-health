@@ -165,10 +165,18 @@ def normalizar_texto(texto):
     if texto is None: return ""
     return ''.join(c for c in unicodedata.normalize('NFKD', str(texto)) if unicodedata.category(c) != 'Mn').lower()
 
+# --- FUNÇÃO DE LIMPEZA CORRIGIDA (REMOVE EMOJIS DO CABEÇALHO) ---
 def limpar_texto_pdf(texto):
     if texto is None: return ""
     texto = str(texto)
-    texto = texto.replace("✅", "[OK]").replace("❌", "[NC]").replace("⚠️", "[!]")
+    # Remove emojis dos Status
+    texto = texto.replace("✅", "[OK]").replace("❌", "[NC]").replace("⚠️", "[ATENCAO]")
+    # Remove emojis dos Títulos de Contexto para não dar erro (?)
+    texto = texto.replace("🏥", "").replace("🏭", "").replace("🛒", "")
+    # Remove acentos básicos
+    texto = texto.replace("â", "a").replace("ã", "a").replace("á", "a").replace("ç", "c")
+    texto = texto.replace("ê", "e").replace("é", "e").replace("í", "i").replace("ó", "o").replace("õ", "o").replace("ú", "u")
+    # Limpeza final de encoding
     return texto.encode('latin-1', 'replace').decode('latin-1')
 
 def aplicar_inteligencia_doc(tipo_doc, data_base=None):
@@ -382,34 +390,25 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     audios_para_zip = []
     for idx, item in enumerate(itens_vistoria):
         if pdf.get_y() > 250: pdf.add_page()
-        
         if item['Gravidade'] == 'CRÍTICO': pdf.set_fill_color(255, 200, 200)
         elif item['Gravidade'] == 'Alto': pdf.set_fill_color(255, 230, 200)
         else: pdf.set_fill_color(230, 255, 230)
-        
         local_safe = limpar_texto_pdf(item['Local'])
         item_safe = limpar_texto_pdf(item['Item'])
         obs_safe = limpar_texto_pdf(item['Obs'])
-        
-        # TÍTULO E NC (LARGURA TOTAL)
         pdf.set_font("Arial", "B", 11)
         pdf.multi_cell(epw, 8, f"#{idx+1} - {local_safe}", 1, 'L', fill=True)
-        
         pdf.set_font("Arial", "B", 10)
-        # RESET DE CURSOR PARA GARANTIR ALINHAMENTO
+        # RESET CURSOR
         pdf.set_x(pdf.l_margin)
         pdf.multi_cell(epw, 6, f"NC Identificada: {item_safe}", 1, 'L')
         
-        # STATUS E RISCO (LADO A LADO)
+        # STATUS E RISCO EM GRID (LADO A LADO)
         pdf.set_font("Arial", "", 10)
-        pdf.set_x(pdf.l_margin) # Garante que começa na margem esquerda
-        
-        # Coluna 1
+        pdf.set_x(pdf.l_margin) # Garante inicio na margem
         pdf.cell(epw/2, 6, f"Status: {limpar_texto_pdf(item['Situação'])}", 1, 0, 'L')
-        # Coluna 2
         pdf.cell(epw/2, 6, f"Risco: {limpar_texto_pdf(item['Gravidade'])}", 1, 1, 'L')
         
-        # NOTA TÉCNICA
         info_extra = ""
         if item.get('Audio_Bytes'):
             nome_audio = f"Audio_Item_{idx+1}.wav"
@@ -482,7 +481,7 @@ if 'cliente_endereco' not in st.session_state: st.session_state['cliente_enderec
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v54.0 - PDF Alinhado")
+    st.caption("v55.0 - PDF Perfeito")
 
 # --- ROBÔ ---
 try:
@@ -850,7 +849,7 @@ elif menu == "Vistoria Mobile":
                 st.session_state['sessao_vistoria'] = []; st.rerun()
 
 elif menu == "Relatórios":
-    st.title("Relatórios")
+    st.title("Histórico de Relatórios")
     tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
     with tab1:
         if st.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
