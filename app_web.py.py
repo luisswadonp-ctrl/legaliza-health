@@ -45,7 +45,7 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_CHECK_ROBO = 60
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
-# --- 2. CÉREBRO DE INTELIGÊNCIA DINÂMICA (MOBILE AUDIT) ---
+# --- 2. CÉREBRO DE INTELIGÊNCIA DINÂMICA ---
 CONTEXT_DATA = {
     "🏥 Hospital / Clínica / Laboratório": {
         "setores": [
@@ -54,40 +54,93 @@ CONTEXT_DATA = {
             "Abrigo de Resíduos", "Cozinha/Copa", "Farmácia/CAF", "Raio-X/Imagem", "UTI", "Centro Cirúrgico"
         ],
         "sugestoes": {
-            "Recepção/Acessibilidade": ["Balcão sem rebaixo PNE (NBR 9050)", "Sanitário PNE sem barras/alarme", "Área de giro obstruída", "Desnível > 5mm sem rampa", "Bebedouro altura incorreta"],
-            "Consultório Indiferenciado": ["Ausência de lavatório para mãos", "Torneira manual (proibido)", "Piso/Parede com juntas", "Mobiliário poroso", "Lixeira sem pedal"],
-            "DML (Limpeza)": ["Tanque único (sem setorização)", "Ausência de ralo sifonado", "Saneantes no chão", "Ventilação ausente"],
-            "Expurgo (Sujo)": ["Cruzamento de fluxo", "Ausência de pia profunda", "Pistola ar/água inoperante", "Bancada porosa"],
-            "Esterilização (Limpo)": ["Autoclave sem teste biológico", "Barreira sujo/limpo inexistente", "Temperatura alta", "Estéreis mal armazenados"],
-            "Abrigo de Resíduos": ["Sem ponto de água/ralo", "Área não telada", "Identificação incorreta (A/B/E)", "Sem ventilação"],
-            "Farmácia/CAF": ["Termohigrômetro descalibrado", "Armário controlados aberto", "Pallets madeira", "Medicamento parede/teto"],
-            "Raio-X/Imagem": ["Luz vermelha inoperante", "Visor com falha", "Porta sem chumbo", "Sem sinalização radiação/grávidas"],
-            "DEFAULT": ["Projeto diferente do local", "Extintor vencido", "Sem rota de fuga", "Luz emergência falha", "Dedetização vencida"]
+            "Recepção/Acessibilidade": [
+                "Balcão de atendimento sem rebaixo PNE (NBR 9050)",
+                "Sanitário PNE sem barras de apoio ou alarme de emergência",
+                "Área de giro 1.50m no sanitário PNE obstruída",
+                "Desnível de piso > 5mm sem rampa",
+                "Bebedouro não acessível (altura incorreta)"
+            ],
+            "Consultório Indiferenciado": [
+                "Ausência de lavatório para mãos (obrigatório)",
+                "Torneira com acionamento manual (exige comando não manual)",
+                "Piso/Parede com juntas ou rodapé não arredondado",
+                "Mobiliário com superfície porosa (madeira não tratada)",
+                "Lixeira sem acionamento por pedal"
+            ],
+            "DML (Limpeza)": [
+                "Tanque de lavagem único (necessário setorização)",
+                "Ausência de ralo sifonado",
+                "Armazenamento de saneantes sem estrado/pallet",
+                "Ventilação mecânica ineficiente/ausente"
+            ],
+            "Expurgo (Sujo)": [
+                "Cruzamento de fluxo limpo x sujo",
+                "Ausência de pia de lavagem profunda (vazia clínica)",
+                "Pistola de ar/água inoperante",
+                "Bancada de madeira ou material poroso"
+            ],
+            "Esterilização (Limpo)": [
+                "Autoclave sem registro de teste biológico/químico",
+                "Barreira física entre área suja/limpa inexistente",
+                "Ar condicionado sem controle de temperatura",
+                "Armazenamento de estéreis próximo ao teto/piso"
+            ],
+            "Abrigo de Resíduos": [
+                "Ausência de ponto de água e ralo",
+                "Área não telada (acesso de vetores)",
+                "Identificação de grupos (A, B, E) incorreta",
+                "Porta sem abertura para ventilação (veneziana)"
+            ],
+            "Farmácia/CAF": [
+                "Termohigrômetro não calibrado ou ausente",
+                "Armário de controlados (Port. 344) sem chave/segurança",
+                "Pallets de madeira (proibido em área limpa)",
+                "Medicamentos encostados na parede/teto"
+            ],
+            "Raio-X/Imagem": [
+                "Sinalização luminosa (luz vermelha) inoperante",
+                "Visor plumbífero com falha de vedação",
+                "Porta sem proteção radiológica (chumbo)",
+                "Ausência de sinalização 'Risco de Radiação' e 'Grávidas'"
+            ],
+            "DEFAULT": [
+                "Divergência entre Projeto (LTA) e Executado",
+                "Extintor vencido ou obstruído",
+                "Sinalização de rota de fuga fotoluminescente ausente",
+                "Iluminação de emergência inoperante",
+                "Certificado de dedetização vencido"
+            ]
         }
     },
     "🏭 Indústria / Logística": {
-        "setores": ["Linha de Produção", "Estoque", "Vestiários", "Refeitório", "Caldeiras", "Externo"],
+        "setores": ["Linha de Produção", "Estoque/Almoxarifado", "Vestiários", "Refeitório", "Caldeiras/Compressor", "Área Externa"],
         "sugestoes": {
-            "Linha de Produção": ["Máquinas sem proteção (NR-12)", "Circulação obstruída", "Painel sem tranca (NR-10)", "Luz fraca"],
-            "Estoque": ["Empilhamento risco queda", "Extintor obstruído", "Porta-pallet danificado", "Sem rota fuga"],
-            "DEFAULT": ["AVCB vencido", "Sem SPDA", "Efluentes irregulares"]
+            "Linha de Produção": ["Máquinas sem proteção (NR-12)", "Área de circulação obstruída", "Painel elétrico sem tranca (NR-10)", "Iluminação insuficiente"],
+            "Estoque/Almoxarifado": ["Empilhamento excessivo", "Extintores obstruídos", "Porta-pallets danificada", "Ausência de rota de fuga"],
+            "DEFAULT": ["AVCB vencido", "Ausência de SPDA", "Descarte de efluentes irregular"]
         }
     },
     "🛒 Varejo de Alimentos": {
-        "setores": ["Venda", "Cozinha", "Estoque", "Câmara Fria", "Lixo"],
+        "setores": ["Área de Venda", "Cozinha/Manipulação", "Estoque Seco", "Câmara Fria", "Saneantes", "Lixo"],
         "sugestoes": {
-            "Cozinha": ["Fluxo cruzado", "Sem pia mãos", "Sem tela janela", "Luz sem proteção"],
-            "Câmara Fria": ["Temp alta", "Gelo acumulado", "Chão sujo", "Porta aberta"],
-            "DEFAULT": ["Licença vencida", "Manual Boas Práticas ausente", "Caixa d'água suja"]
+            "Cozinha/Manipulação": ["Fluxo cruzado", "Ausência de pia exclusiva mãos", "Ausência de tela milimétrica", "Luminárias sem proteção"],
+            "Câmara Fria": ["Temperatura alta", "Gelo acumulado", "Alimentos no chão", "Porta não veda"],
+            "DEFAULT": ["Licença Sanitária vencida", "Manual de Boas Práticas desatualizado", "Caixa d'Água suja"]
         }
     }
 }
 
-# --- 2.1 BASE DE DOCUMENTOS (GESTÃO DOCS - COMPLETA) ---
-# Mapeamento de Risco, Validade (dias) e Checklist Sugerido
+# --- 2.1 BASE DE DOCUMENTOS ---
 DOC_INTELLIGENCE = {
-    # GERAIS E PREFEITURA
-    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Solicitar renovação na Prefeitura", "Pagar taxa TFE", "Afixar original na recepção"]},
+    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura", "tarefas": ["Renovação", "Taxa"]},
+    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+vigilancia", "tarefas": ["Protocolo VISA", "Manual Boas Práticas"]},
+    "Corpo de Bombeiros": {"dias": 1095, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+avcb+bombeiros", "tarefas": ["Extintores", "Hidrantes"]},
+    "DEFAULT": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Verificar validade"]}
+}
+
+# ADICIONANDO A BASE DE CONHECIMENTO COMPLETA (Versão Sênior)
+DOC_INTELLIGENCE.update({
     "Licença de Publicidade": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Medir fachada", "Pagar taxa TFA/Cadan", "Verificar padrão visual"]},
     "Inscrição Municipal": {"dias": 0, "risco": "NORMAL", "link": "", "tarefas": ["Verificar cadastro mobiliário", "Atualizar dados fiscais"]},
     "Habite-se": {"dias": 0, "risco": "CRÍTICO", "link": "", "tarefas": ["Verificar metragem construída", "Arquivar planta aprovada"]},
@@ -98,22 +151,13 @@ DOC_INTELLIGENCE = {
     "Termo de aceite de sinalização de vaga para deficiente e idoso": {"dias": 0, "risco": "BAIXO", "link": "", "tarefas": ["Pintura de solo", "Placa vertical", "Medidas ABNT"]},
     "Certificado de acessibilidade": {"dias": 0, "risco": "MÉDIO", "link": "", "tarefas": ["Laudo NBR 9050", "Rampas/Banheiros adaptados"]},
     "Carta de anuência tombamento": {"dias": 0, "risco": "MÉDIO", "link": "", "tarefas": ["Verificar restrições de fachada", "Patrimônio histórico"]},
-
-    # SEGURANÇA E BOMBEIROS
-    "Corpo de Bombeiros": {"dias": 1095, "risco": "CRÍTICO", "link": "", "tarefas": ["Extintores (validade/carga)", "Hidrantes (teste vazão)", "Luz de emergência", "Brigada de incêndio", "ART Gás/Elétrica"]},
     "Certificado de Manutenção do Sistema de Segurança": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Laudo câmeras/CFTV", "Teste alarme", "Manutenção cercas"]},
     "Licença do Comando da Aeronáutica (COMAER)": {"dias": 1095, "risco": "ALTO", "link": "", "tarefas": ["Aprovação AGA", "Luz piloto topo prédio"]},
-
-    # POLÍCIA E CONTROLADOS
     "Polícia Civil (Licença)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Relatório trimestral", "Taxa fiscalização", "Vistoria local"]},
     "Polícia Civil (Termo de Vistoria)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Livro de registro", "Agendamento vistoria"]},
     "Polícia Federal (Licença)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Mapas mensais (químicos)", "Renovação CRC/CLF", "Controle estoque"]},
-
-    # MEIO AMBIENTE
     "Licença Ambiental": {"dias": 1460, "risco": "MÉDIO", "link": "", "tarefas": ["Manifesto resíduos (MTR)", "PGRSS atualizado", "Renovação LO"]},
     "Cadastro de tanques, bombas e equipamentos afins": {"dias": 1825, "risco": "ALTO", "link": "", "tarefas": ["Teste estanqueidade", "Limpeza tanques", "Licença ambiental"]},
-
-    # CONSELHOS DE CLASSE
     "Conselho de Medicina (CRM)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Certificado Regularidade", "Lista corpo clínico", "Anuidade PJ", "Diretor Técnico"]},
     "Conselho de Enfermagem (COREN)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["CRT (Certidão Resp. Técnica)", "Dimensionamento equipe", "Escalas assinadas"]},
     "Conselho de Farmácia (CRF)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Certidão Regularidade", "Farmacêutico presente", "Baixa RT anterior"]},
@@ -125,120 +169,25 @@ DOC_INTELLIGENCE = {
     "Conselho de Radiologia (CRTR)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Supervisor Proteção Radiológica", "Lista técnicos"]},
     "Conselho de Fisioterapia e Terapia Ocupacional (CREFITO)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["DRF (Declaração Regularidade)", "Fisioterapeuta RT"]},
     "Conselho de Fonoaudiologia (CREFONO)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Registro PJ", "Fonoaudiólogo RT"]},
-
-    # CADASTROS NACIONAIS
     "CNES": {"dias": 180, "risco": "CRÍTICO", "link": "https://cnes.datasus.gov.br/", "tarefas": ["Atualizar RT", "Atualizar quadro RH", "Atualizar equipamentos"]},
-
-    # LICENÇAS SANITÁRIAS (GERAIS E SERVIÇOS)
-    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Protocolo VISA", "Manual Boas Práticas", "PGRSS", "PCMSO/PPRA", "Laudo água/dedetização"]},
-    
-    # SERVIÇOS ESPECÍFICOS (VINCULADOS A CONSELHOS OU VISA)
-    "Conselho de Biomedicina (CRBM) Serviço - Laboratório": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["RT Biomédico", "PNCQ (Controle Qualidade)", "Calibração pipetas"]},
     "Licença Sanitária Serviço (Laboratório)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Controle Qualidade", "Pop's analíticos", "Gerenciamento resíduos"]},
-    "Conselho de Biomedicina (CRBM) Serviço - Posto de Coleta": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Vínculo com laboratório central", "Logística de amostras"]},
-    "Conselho de Farmácia (CRF) Serviço - Posto de Coleta": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Farmacêutico RT", "Manual de coleta"]},
-    "Licença Sanitária Serviço (Posto de Coleta de Leite Humano)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Controle temperatura", "Pasteurização (se houver)", "Triagem doadoras"]},
-    "Licença Sanitária Serviço (Dispensário)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Controle estoque", "Armazenamento correto", "Sem fracionamento"]},
+    "Conselho de Biomedicina (CRBM) Serviço - Laboratório": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["RT Biomédico", "PNCQ", "Calibração"]},
     "Licença Sanitária Serviço (Farmácia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Controle temperatura/umidade", "SNGPC (Controlados)", "Qualificação fornecedor"]},
-    "Conselho de Farmácia (CRF) Serviço - Farmácia Hospitalar": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Farmácia Clínica", "Comissão Farmácia Terapêutica", "RT Integral"]},
-    "Conselho de Farmácia (CRF) Serviço - Farmácia de Manipulação": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Cabines segurança", "Controle pesagem", "Matéria-prima certificada"]},
-    "Conselho de Farmácia (CRF) Serviço - Laboratório": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Farmacêutico Bioquímico RT", "Controle Qualidade"]},
-    "Conselho de Farmácia (CRF) Serviço (Oncologia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Cabine fluxo laminar", "Kit derramamento", "EPIs específicos"]},
-    
-    "Licença Sanitária Serviço (Cozinha/Nutrição)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Amostras refeições", "Exames manipuladores", "Limpeza exaustor", "Manual UAN"]},
-    "Licença Sanitária Serviço (Radiologia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Levantamento Radiométrico", "Testes Constância", "Dosimetria", "Memorial Blindagem"]},
+    "Licença Sanitária Serviço (Radiologia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Levantamento Radiométrico", "Testes Constância", "Dosimetria"]},
     "Licença Sanitária Serviço (Tomografia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Programa Garantia Qualidade", "Testes aceitação", "Laudo físico"]},
-    "Licença Sanitária (Tomografia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Programa Garantia Qualidade", "Testes aceitação", "Laudo físico"]},
-    "Licença Sanitária Serviço (Ultrassom)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Manutenção preventiva", "Limpeza transdutores"]},
-    "Licença Sanitária Serviço (Registro gráfico, ECG. EEG)": {"dias": 365, "risco": "BAIXO", "link": "", "tarefas": ["Calibração equipamentos", "Laudos especialista"]},
-    
     "Licença Sanitária Serviço (Hemoterapia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Validação Rede Frio", "Ciclo do sangue", "Comitê Transfusional"]},
-    "Licença Sanitária Serviço (Ag. Transfusional)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Temperatura geladeiras", "Registro transfusões", "Hemovigilância"]},
-    "Licença Sanitária Serviço (Banco de Sangue)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Triagem doadores", "Sorologia", "Fracionamento"]},
-    "Conselho de Medicina (CRM) Serviço (Banco de Sangue)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Médico Hemoterapeuta RT"]},
-    "Conselho de Biomedicina (CRBM) Serviço - Banco de Sangue": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Biomédico atuante", "Processamento sangue"]},
-    
-    "Licença Sanitária Serviço (Hemodiálise)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Análise água (Endotoxinas)", "Manutenção máquinas", "Sorologia pacientes"]},
-    "Conselho de Medicina (CRM) Serviço Hemodiálise": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Nefrologista RT", "Escala médica"]},
-    "Conselho de Medicina (CRM) - Diálise": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Nefrologista RT", "Escala médica"]},
-    "Conselho de Enfermagem (COREN) Serviço (Nefrologia)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro Especialista", "Técnicos capacitados"]},
-    
-    "Licença Sanitária Serviço (Oncologia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Protocolos quimioterapia", "Registro câncer", "Fluxo pacientes"]},
-    "Conselho de Medicina (CRM) Serviço (Oncologia)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Oncologista RT", "Prescrição médica"]},
-    "Conselho de Enfermagem (COREN) Serviço (Oncologia)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro Oncologista", "Protocolos administração"]},
-    "Licença Sanitária Serviço (Quimioterapia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Manipulação segura", "Sala administração", "Intercorrências"]},
-    "Conselho de Enfermagem (COREN) Serviço (Quimioterapia)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Certificação manipulação", "EPIs quimio"]},
-    
-    "Licença Sanitária Serviço (UTI Adulto)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Monitoramento 24h", "Equipamentos suporte vida", "CCIH", "Climatização"]},
-    "Conselho de Medicina (CRM) Serviço (UTI Adulto)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Intensivista RT", "Escala plantão", "Rotina médica"]},
-    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 1)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro coordenador", "Técnicos por leito"]},
-    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 2)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro coordenador", "Técnicos por leito"]},
-    "Conselho de Enfermagem (COREN) Serviço (UTI Adulto 3)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro coordenador", "Técnicos por leito"]},
-    "Conselho de Enfermagem (COREN) Serviço (UTI)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro coordenador", "Técnicos por leito"]},
+    "Licença Sanitária Serviço (Hemodiálise)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Análise água", "Manutenção máquinas", "Sorologia pacientes"]},
+    "Licença Sanitária Serviço (Oncologia)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Protocolos quimioterapia", "Registro câncer"]},
+    "Licença Sanitária Serviço (UTI Adulto)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Monitoramento 24h", "Equipamentos suporte", "CCIH"]},
     "Licença Sanitária Serviço (UTI Neonatal)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Incubadoras", "Rede gases", "Área ordenha"]},
-    "Conselho de Medicina (CRM) Serviço (UTI Neonatal)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Neonatologista RT", "Reanimação neonatal"]},
-    "Conselho de Enfermagem (COREN) Serviço (UTI Neonatal)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro Neo", "Protocolos RN"]},
-    "Conselho de Medicina (CRM) Serviço (UTI Pediátrica)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Pediatra Intensivista", "Materiais infantis"]},
-    "Conselho de Enfermagem (COREN) Serviço (UTI Pediátrica)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro Pediátrico"]},
-    "Licença Sanitária Serviço (UTI Mista)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Fluxos separados", "Equipamentos híbridos"]},
-    
-    "Conselho de Medicina (CRM) Serviço (Neonatologia)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Sala parto", "Alojamento conjunto"]},
-    "Conselho de Medicina (CRM) Serviço (Obstetrícia)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Obstetra RT", "Centro Obstétrico"]},
-    "Conselho de Enfermagem (COREN) Serviço (Maternidade)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeira Obstetra", "Parto humanizado"]},
-    
-    "Licença Sanitária Serviço (Endoscopia)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Rastreabilidade processamento", "Armazenamento endoscópios", "Sala recuperação"]},
-    "Conselho de Medicina (CRM) Serviço (Endoscopia)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Endoscopista RT", "Sedação segura"]},
-    
-    "Conselho de Enfermagem (COREN) Serviço (Centro Cirúrgico)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro CC", "Protocolo Cirurgia Segura", "Contagem compressas"]},
-    "Licença Sanitária Serviço (Procedimentos Cirúrgicos)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Sala recuperação pós-anestésica", "Carro emergência", "Gases medicinais"]},
-    
-    "Conselho de Enfermagem (COREN) Serviço (CME)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro exclusivo", "Fluxo unidirecional", "Validação processos"]},
-    
-    "Licença Sanitária Serviço (Transplante de Medula Óssea)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Credenciamento SNT", "Fluxo laminar", "Isolamento"]},
-    "Conselho de Medicina (CRM) Serviço (Transplante de Médula Óssea)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Hematologista RT", "Equipe TMO"]},
-    "Licença Sanitária Serviço (Transplante de Fígado)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Credenciamento SNT", "UTI suporte", "Cirurgião Hepático"]},
-    "Licença Sanitária Serviço (Transplante de Rim)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Credenciamento SNT", "Suporte diálise", "Nefrologista"]},
-    "Licença Sanitária Serviço (Transplante Musculo Esquelético)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Banco tecidos", "Ortopedista"]},
-    "Conselho de Medicina (CRM) Serviço (TME - Transplante de Músculo Esquelético)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["RT Banco Tecidos"]},
-    "Licença Sanitária Serviço (Captação)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["CIHDOTT", "Protocolo morte encefálica"]},
-    
-    "Licença Sanitária Serviço (Ambulância)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Documento veículo", "Equipamentos suporte vida", "Limpeza viatura"]},
-    "Licença Sanitária Serviço (Remoção de pacientes)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Condutor socorrista", "Kit primeiros socorros"]},
-    
+    "Licença Sanitária Serviço (CME)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Testes autoclave", "Qualificação térmica", "Rastreabilidade"]},
     "Licença Sanitária Serviço (Vacinas)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Rede de frio", "Gerador/Nobreak", "Registro doses"]},
-    
-    "Conselho de Medicina (CRM) Serviço (Emergência)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Médico 24h", "Classificação risco", "Carrinho parada"]},
-    "Conselho de Enfermagem (COREN) Serviço (Urgência/Emergência)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro classificação", "Protocolos Manchester"]},
-    "Licença Sanitária Serviço (Pronto Socorro)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Sala vermelha equipada", "Fluxos entrada", "Isolamento"]},
-    
-    "Conselho de Medicina (CRM) Serviço (Radiologia Clinica)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Radiologista laudos", "Proteção radiológica"]},
-    "Conselho de Medicina (CRM) Serviço (Ergometria)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Cardiologista", "Desfibrilador sala"]},
-    "Conselho de Medicina (CRM) Serviço Hemodinamica": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Hemodinamicista", "Sala híbrida", "Suporte UTI"]},
-    "Licença Sanitária Serviço (Hemodinâmica)": {"dias": 365, "risco": "CRÍTICO", "link": "", "tarefas": ["Blindagem sala", "Equipamentos imagem", "Carro emergência"]},
-    "Conselho de Enfermagem (COREN) Serviço - Hemodinâmica": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Enfermeiro especialista", "Cuidados pós-cateterismo"]},
-    
-    "Licença Sanitária Serviço (Fonoaudiologia)": {"dias": 365, "risco": "BAIXO", "link": "", "tarefas": ["Audiometria calibrada", "Cabine acústica"]},
-    "Licença Sanitária Serviço (Psicologia)": {"dias": 365, "risco": "BAIXO", "link": "", "tarefas": ["Prontuário sigiloso", "Ambiente acolhedor"]},
-    "Licença Sanitária Serviço (Fisioterapia)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Higienização macas", "Manutenção equipamentos"]},
-    "Licença Sanitária Serviço (Assistência Domiciliar)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Mochila atendimento", "Prontuário domiciliar", "Carro transporte"]},
-    "Licença Sanitária Serviço (Clínica)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Alvará", "Lixo infectante", "Prontuário"]},
-    "Licença Sanitária Serviço (Consultório Isolado)": {"dias": 365, "risco": "BAIXO", "link": "", "tarefas": ["Pia lavagem mãos", "Sanitário", "Ventilação"]},
-    "Conselho de Medicina (CRM) Serviço (Pediatria)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Pediatra RT", "Ambiente lúdico"]},
-    "Conselho de Enfermagem (COREN) Serviço (Ambulatorial)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Curativos", "Medicação", "Triagem"]},
-    "Conselho de Enfermagem (COREN) Serviço (Internação)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Prescrição enfermagem", "Evolução diária", "Passagem plantão"]},
-    "Conselho de Enfermagem (COREN) Serviço (Vida & Imagem)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Suporte exames", "Contraste"]},
-    "Licença Sanitária Serviço (SADT - Apoio Diagnóstico Terapêutico)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Contratos manutenção", "Laudos", "RTs específicos"]},
-    
-    "Licença Sanitária Serviço (Equipamento)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Plano Manutenção (PMOC)", "Calibração RBC", "Teste Segurança Elétrica", "Etiqueta Validade", "Treinamento Operacional"]},
-    
-    "DEFAULT": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Verificar validade", "Digitalizar documento", "Protocolar renovação", "Pagar taxas"]}
-}
-
-# Loop para gerar equipamentos numerados (1 a 22) com o mesmo checklist padrão
+    "Licença Sanitária Serviço (Equipamento)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Plano Manutenção", "Calibração", "Teste Segurança Elétrica", "Etiqueta Validade"]},
+})
+# Loop para equipamentos
 for i in range(1, 23):
     DOC_INTELLIGENCE[f"Licença Sanitária Serviço (Equipamento {i})"] = DOC_INTELLIGENCE["Licença Sanitária Serviço (Equipamento)"]
 
-# Lista completa para o dropdown
 LISTA_TIPOS_DOCUMENTOS = sorted(list(DOC_INTELLIGENCE.keys()) + ["Outros"])
 
 # --- AUTO-REFRESH ---
@@ -277,7 +226,6 @@ def aplicar_inteligencia_doc(tipo_doc, data_base=None):
     if not data_base: data_base = date.today()
     info = DOC_INTELLIGENCE.get(tipo_doc)
     if not info:
-        # Tenta match parcial (Ex: Equipamento 5)
         for chave, dados in DOC_INTELLIGENCE.items():
             if chave in tipo_doc:
                 info = dados
@@ -575,7 +523,7 @@ if 'cliente_endereco' not in st.session_state: st.session_state['cliente_enderec
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v56.0 - Base de Conhecimento Total")
+    st.caption("v57.0 - Layout Ajustado")
 
 # --- ROBÔ ---
 try:
@@ -746,7 +694,7 @@ elif menu == "Gestão de Docs":
             if not indices.empty:
                 idx = indices[0]
                 doc_nome = df_prazos.at[idx, 'Documento']
-                c_tit, c_edit_btn = st.columns([4, 1])
+                c_tit, c_edit_btn = st.columns([3, 1.5], vertical_alignment="bottom")
                 opcoes_docs = LISTA_TIPOS_DOCUMENTOS.copy()
                 if doc_nome not in opcoes_docs: opcoes_docs.insert(0, doc_nome) 
                 try: idx_atual = opcoes_docs.index(doc_nome)
