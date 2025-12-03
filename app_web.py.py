@@ -133,13 +133,11 @@ CONTEXT_DATA = {
 
 # --- 2.1 BASE DE DOCUMENTOS ---
 DOC_INTELLIGENCE = {
-    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura", "tarefas": ["Renovação", "Taxa"]},
-    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+vigilancia", "tarefas": ["Protocolo VISA", "Manual Boas Práticas"]},
-    "Corpo de Bombeiros": {"dias": 1095, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+avcb+bombeiros", "tarefas": ["Extintores", "Hidrantes"]},
+    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento", "tarefas": ["Renovação", "Taxa"]},
+    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria", "tarefas": ["Protocolo VISA", "Manual Boas Práticas"]},
     "DEFAULT": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Verificar validade"]}
 }
-
-# ADICIONANDO A BASE DE CONHECIMENTO COMPLETA (Versão Sênior)
+# ADICIONANDO A BASE DE CONHECIMENTO COMPLETA
 DOC_INTELLIGENCE.update({
     "Licença de Publicidade": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Medir fachada", "Pagar taxa TFA/Cadan", "Verificar padrão visual"]},
     "Inscrição Municipal": {"dias": 0, "risco": "NORMAL", "link": "", "tarefas": ["Verificar cadastro mobiliário", "Atualizar dados fiscais"]},
@@ -184,7 +182,6 @@ DOC_INTELLIGENCE.update({
     "Licença Sanitária Serviço (Vacinas)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Rede de frio", "Gerador/Nobreak", "Registro doses"]},
     "Licença Sanitária Serviço (Equipamento)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Plano Manutenção", "Calibração", "Teste Segurança Elétrica", "Etiqueta Validade"]},
 })
-# Loop para equipamentos
 for i in range(1, 23):
     DOC_INTELLIGENCE[f"Licença Sanitária Serviço (Equipamento {i})"] = DOC_INTELLIGENCE["Licença Sanitária Serviço (Equipamento)"]
 
@@ -231,7 +228,6 @@ def aplicar_inteligencia_doc(tipo_doc, data_base=None):
                 info = dados
                 break
     if not info: info = DOC_INTELLIGENCE["DEFAULT"]
-    
     novo_vencimento = data_base
     if info["dias"] > 0: novo_vencimento = data_base + timedelta(days=info["dias"])
     return info["risco"], novo_vencimento, info["link"], info["tarefas"]
@@ -292,6 +288,13 @@ def carregar_tudo_inicial():
         return df_prazos, df_check
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame()
+
+def carregar_historico_vistorias():
+    try:
+        sh = conectar_gsheets()
+        ws = sh.worksheet("Vistorias")
+        return pd.DataFrame(ws.get_all_records())
+    except: return pd.DataFrame()
 
 def get_dados():
     if 'dados_cache' not in st.session_state or st.session_state['dados_cache'] is None:
@@ -420,13 +423,11 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     pdf.add_page()
     pdf.set_font("Arial", "B", 12)
     epw = pdf.w - 2*pdf.l_margin 
-    
     pdf.set_fill_color(220, 220, 220)
     pdf.cell(epw, 10, "DADOS DO CLIENTE / UNIDADE", 1, 1, 'L', fill=True)
     pdf.set_font("Arial", "", 11)
     pdf.multi_cell(epw, 6, f"Cliente: {limpar_texto_pdf(nome_cliente)}\nEndereco: {limpar_texto_pdf(endereco_cliente)}\nTipo: {limpar_texto_pdf(tipo_estabelecimento)}", 1)
     pdf.ln(5)
-
     total = len(itens_vistoria)
     criticos = sum(1 for i in itens_vistoria if i['Gravidade'] == 'CRÍTICO')
     pdf.set_font("Arial", "B", 12)
@@ -435,7 +436,6 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     pdf.set_font("Arial", "", 11)
     pdf.cell(epw, 8, f"Total de Apontamentos: {total} | Pontos Criticos: {criticos}", 1, 1)
     pdf.ln(5)
-
     audios_para_zip = []
     for idx, item in enumerate(itens_vistoria):
         if pdf.get_y() > 250: pdf.add_page()
@@ -523,7 +523,7 @@ if 'cliente_endereco' not in st.session_state: st.session_state['cliente_enderec
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v57.0 - Layout Ajustado")
+    st.caption("v58.0 - Dashboard BI")
 
 # --- ROBÔ ---
 try:
@@ -891,27 +891,71 @@ elif menu == "Vistoria Mobile":
                 st.session_state['sessao_vistoria'] = []; st.rerun()
 
 elif menu == "Relatórios":
-    st.title("Histórico de Relatórios")
-    tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
-    with tab1:
-        if st.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
-        if len(st.session_state['vistorias']) > 0:
-            pdf = gerar_pdf(st.session_state['vistorias'])
-            st.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
-    with tab2:
-        try:
-            sh = conectar_gsheets()
-            ws = sh.worksheet("Vistorias")
-            df_h = pd.DataFrame(ws.get_all_records())
-            if not df_h.empty:
-                sel = st.selectbox("Data:", df_h['Data'].unique())
-                df_f = df_h[df_h['Data'] == sel]
-                st.info("Edite ou exclua linhas abaixo e clique em Salvar Correções.")
-                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
-                c_save, c_down = st.columns(2)
-                if c_save.button("💾 Salvar Correções no Histórico"):
-                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
-                if c_down.button(f"📥 Baixar PDF"):
-                    pdf = gerar_pdf(df_f.to_dict('records'))
-                    st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
-        except: st.error("Sem histórico.")
+    st.title("📊 Dashboard de Inteligência")
+    
+    tab_dash, tab_audit_db = st.tabs(["🚀 Dashboard Executivo", "📂 Histórico de Vistorias (Nuvem)"])
+    
+    # --- TAB 1: DASHBOARD BI ---
+    with tab_dash:
+        df_docs, _ = get_dados()
+        df_audits = carregar_historico_vistorias()
+        
+        # KPIs Principais
+        k1, k2, k3, k4 = st.columns(4)
+        
+        # KPI 1: Documentos Críticos
+        n_crit = len(df_docs[df_docs['Status'] == 'CRÍTICO']) if not df_docs.empty else 0
+        k1.metric("Docs Críticos", n_crit, delta="Atenção!" if n_crit > 0 else "Ok", delta_color="inverse")
+        
+        # KPI 2: Conformidade Global
+        media_prog = int(df_docs['Progresso'].mean()) if not df_docs.empty else 0
+        k2.metric("Conformidade Docs", f"{media_prog}%")
+        
+        # KPI 3: Vistorias Realizadas (Total)
+        total_vistorias = len(df_audits) if not df_audits.empty else 0
+        k3.metric("Vistorias Realizadas", total_vistorias)
+        
+        # KPI 4: Docs Vencidos
+        vencidos = 0
+        if not df_docs.empty:
+            hoje = date.today()
+            # Converte para data se possível
+            df_docs['Vencimento_dt'] = pd.to_datetime(df_docs['Vencimento'], dayfirst=True, errors='coerce').dt.date
+            vencidos = len(df_docs[df_docs['Vencimento_dt'] < hoje])
+        k4.metric("Docs Vencidos", vencidos, delta="-Ação Imediata" if vencidos > 0 else "Ok", delta_color="inverse")
+        
+        st.markdown("---")
+        
+        # GRÁFICOS AVANÇADOS (PLOTLY)
+        if TEM_PLOTLY:
+            c_g1, c_g2 = st.columns(2)
+            
+            # Gráfico 1: Sunburst de Documentos (Status -> Setor)
+            if not df_docs.empty:
+                fig_sun = px.sunburst(df_docs, path=['Status', 'Setor'], title="Distribuição de Risco por Setor")
+                c_g1.plotly_chart(fig_sun, use_container_width=True)
+            else:
+                c_g1.info("Sem dados de documentos.")
+            
+            # Gráfico 2: Problemas Recorrentes em Vistorias (Top 5)
+            if not df_audits.empty and 'Item' in df_audits.columns:
+                top_ncs = df_audits['Item'].value_counts().head(5).reset_index()
+                top_ncs.columns = ['NC / Problema', 'Ocorrências']
+                fig_bar = px.bar(top_ncs, x='Ocorrências', y='NC / Problema', orientation='h', title="Top 5 Problemas Recorrentes (Auditoria)")
+                c_g2.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                c_g2.info("Sem dados suficientes de vistorias.")
+
+    # --- TAB 2: HISTÓRICO (CRUD ANTIGO) ---
+    with tab_audit_db:
+        st.info("Edição de dados brutos salvos na nuvem.")
+        if not df_audits.empty:
+            sel = st.selectbox("Filtrar por Data:", ["Todas"] + sorted(list(df_audits['Data'].unique()), reverse=True))
+            df_f = df_audits if sel == "Todas" else df_audits[df_audits['Data'] == sel]
+            
+            st.dataframe(df_f, use_container_width=True)
+            
+            with st.expander("✏️ Editar Registros (Avançado)"):
+                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True)
+                if st.button("💾 Salvar Edição na Nuvem"):
+                    salvar_historico_editado(df_edited, sel if sel != "Todas" else df_audits['Data'].iloc[0])
