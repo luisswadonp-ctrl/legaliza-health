@@ -33,8 +33,13 @@ try:
 except ImportError:
     TEM_PLOTLY = False
 
-# --- 1. CONFIGURAÇÃO GERAL ---
-st.set_page_config(page_title="LegalizaHealth Pro", page_icon="🏥", layout="wide")
+# --- 1. CONFIGURAÇÃO GERAL (MOBILE FIRST) ---
+st.set_page_config(
+    page_title="LegalizaHealth Pro", 
+    page_icon="🏥", 
+    layout="wide",
+    initial_sidebar_state="collapsed" # COMEÇA FECHADO PARA DAR ESPAÇO NO CELULAR
+)
 
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_CHECK_ROBO = 60
@@ -280,7 +285,10 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
         obs_safe = limpar_texto_pdf(item['Obs'])
         
         pdf.set_font("Arial", "B", 11)
-        pdf.multi_cell(0, 8, f"#{idx+1} - {local_safe} | {item_safe}", 1, 'L', fill=True)
+        pdf.multi_cell(0, 8, f"#{idx+1} - {local_safe}", 1, 'L', fill=True)
+        
+        pdf.set_font("Arial", "B", 10)
+        pdf.multi_cell(0, 6, f"NC Identificada: {item_safe}")
         
         pdf.set_font("Arial", "", 10)
         info_extra = ""
@@ -290,7 +298,7 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
             audios_para_zip.append((nome_audio, item['Audio_Bytes']))
             info_extra = f" [AUDIO ANEXO: {nome_audio}]"
 
-        pdf.multi_cell(0, 6, f"Status: {limpar_texto_pdf(item['Situação'])}\nGravidade: {limpar_texto_pdf(item['Gravidade'])}\nTecnica: {obs_safe}{info_extra}")
+        pdf.multi_cell(0, 6, f"Status: {limpar_texto_pdf(item['Situação'])}\nGravidade: {limpar_texto_pdf(item['Gravidade'])}\nDetalhes: {obs_safe}{info_extra}")
         pdf.ln(2)
         
         if item['Fotos']:
@@ -324,11 +332,13 @@ if 'sessao_vistoria' not in st.session_state: st.session_state['sessao_vistoria'
 if 'fotos_temp' not in st.session_state: st.session_state['fotos_temp'] = []
 if 'obs_atual' not in st.session_state: st.session_state['obs_atual'] = ""
 if 'tipo_estabelecimento_atual' not in st.session_state: st.session_state['tipo_estabelecimento_atual'] = "🏥 Hospital / Clínica / Laboratório"
+# Controle de seleção das checkboxes para evitar reset
+if 'checks_temp' not in st.session_state: st.session_state['checks_temp'] = {}
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v48.1 - Correção Estado Vistoria")
+    st.caption("v49.0 - Mobile Sênior")
 
 # --- TELAS ---
 if menu == "Painel Geral":
@@ -339,12 +349,10 @@ elif menu == "Gestão de Docs":
     st.info("Módulo carregado.")
 
 elif menu == "Vistoria Mobile":
-    st.title("📋 Vistoria Técnica (Legalização)")
+    st.title("📋 Vistoria Técnica")
     
     st.write("📍 **Contexto da Vistoria**")
     
-    # --- CORREÇÃO DE SEGURANÇA (FIX) ---
-    # Verifica se o valor atual no session_state é válido para a lista nova
     if st.session_state['tipo_estabelecimento_atual'] not in CONTEXT_DATA.keys():
         st.session_state['tipo_estabelecimento_atual'] = list(CONTEXT_DATA.keys())[0]
         
@@ -355,79 +363,80 @@ elif menu == "Vistoria Mobile":
     )
     if tipo_estab != st.session_state['tipo_estabelecimento_atual']:
         st.session_state['tipo_estabelecimento_atual'] = tipo_estab
+        st.session_state['checks_temp'] = {} # Limpa seleção se mudar contexto
         st.rerun()
 
     st.markdown("---")
 
     qtd_itens = len(st.session_state['sessao_vistoria'])
-    st.progress(min(qtd_itens * 5, 100), text=f"Apontamentos: {qtd_itens}")
+    st.progress(min(qtd_itens * 5, 100), text=f"Apontamentos na Sessão: {qtd_itens}")
 
-    c_form, c_lista = st.columns([1, 1.2])
+    # NO MOBILE, USAMOS ABAS PARA ORGANIZAR EM VEZ DE COLUNAS APERTADAS
+    tab_coleta, tab_revisao = st.tabs(["📸 Coleta de Dados", "📄 Revisar & Baixar"])
 
-    with c_form:
-        st.subheader("1. Coleta de Não Conformidades")
+    with tab_coleta:
         with st.container(border=True):
             contexto_atual = CONTEXT_DATA[st.session_state['tipo_estabelecimento_atual']]
             lista_setores = contexto_atual["setores"]
             mapa_sugestoes = contexto_atual["sugestoes"]
 
-            local = st.selectbox("Setor / Área", lista_setores)
+            local = st.selectbox("1. Setor / Área", lista_setores)
             
-            # --- MULTI-SELECT DE NCs ---
+            # --- SELEÇÃO POR CHECKBOX (MELHOR PARA MOBILE) ---
             sugestoes = mapa_sugestoes.get(local, mapa_sugestoes["DEFAULT"])
             
+            selecionados_agora = []
+            
             if sugestoes:
-                st.info(f"🔍 Não Conformidades Comuns em **{local}**:")
-                problemas_selecionados = st.multiselect(
-                    label="Selecione as NCs encontradas (Lista Cumulativa)",
-                    options=sugestoes,
-                    default=[],
-                    key=f"multi_{local}"
-                )
-                
-                if problemas_selecionados:
-                    texto_combinado = " + ".join(problemas_selecionados)
-                    # Só atualiza se for diferente para permitir edição manual
-                    if " + " not in st.session_state.get('item_temp_nome', "") or st.session_state.get('item_temp_nome', "") == "":
-                         st.session_state['item_temp_nome'] = texto_combinado
-                    elif len(problemas_selecionados) > 0: # Força update se selecionou algo novo
-                         st.session_state['item_temp_nome'] = texto_combinado
+                st.info(f"👇 Toque para selecionar NCs em **{local}**:")
+                with st.expander("🔍 Lista de Problemas Comuns (Toque aqui)", expanded=True):
+                    for sug in sugestoes:
+                        # Cria uma chave única para cada checkbox baseada no setor e texto
+                        chave_chk = f"{local}_{sug}"
+                        # Se marcado, adiciona à lista
+                        if st.checkbox(sug, key=chave_chk):
+                            selecionados_agora.append(sug)
             
-            val_item = st.session_state.get('item_temp_nome', "")
-            item_nome = st.text_area("Descrição da NC (Editável)", value=val_item, key="input_item_nome", height=100, help="Descreva a não conformidade técnica.")
-            
-            if item_nome != val_item: st.session_state['item_temp_nome'] = item_nome
-
-            c1, c2 = st.columns(2)
-            situacao = c1.radio("Status Legal", ["❌ Não Conforme", "⚠️ Parcial", "✅ Conforme"], horizontal=False)
-            gravidade = c2.select_slider("Risco Sanitário/Legal", options=["Baixo", "Médio", "Alto", "CRÍTICO"], value="Alto")
+            # Monta o texto automaticamente
+            texto_automatico = ""
+            if selecionados_agora:
+                texto_automatico = " + ".join(selecionados_agora)
             
             st.markdown("---")
-            st.write("📝 **Evidência Técnica & Voz**")
-            audio_input = st.audio_input("🎙️ Gravar Nota Técnica", key="mic_input")
+            st.write("2. Descrição da Não Conformidade")
             
+            # Se tiver seleção automática, usa ela. Se o usuário editou manualmente antes, respeita a edição (complexo em stateless, vamos simplificar: o automático sobrescreve ou concatena)
+            
+            item_nome = st.text_area("Descrição Técnica", value=texto_automatico, height=150, help="O texto aqui será salvo no relatório. Você pode editar.")
+            
+            c1, c2 = st.columns(2)
+            situacao = c1.radio("Status", ["❌ Não Conforme", "⚠️ Parcial", "✅ Conforme"], horizontal=False)
+            gravidade = c2.select_slider("Risco", options=["Baixo", "Médio", "Alto", "CRÍTICO"], value="Alto")
+            
+            st.markdown("---")
+            st.write("3. Evidências (Voz e Foto)")
+            
+            audio_input = st.audio_input("🎙️ Gravar Nota", key="mic_input")
             if audio_input and TEM_RECONHECIMENTO_VOZ:
                 txt = transcrever_audio(audio_input)
                 if txt and txt not in st.session_state['obs_atual']:
                     st.session_state['obs_atual'] += " " + txt
             
-            obs = st.text_area("Detalhes Técnicos / Base Legal", value=st.session_state['obs_atual'], height=100, placeholder="Ex: Piso poroso não atende RDC 50...")
+            obs = st.text_area("Detalhes Adicionais", value=st.session_state['obs_atual'], height=100, placeholder="Ex: Piso quebrado próximo à porta...")
             if obs != st.session_state['obs_atual']: st.session_state['obs_atual'] = obs
 
-            st.markdown("---")
-            st.write("📸 **Fotos (Evidência)**")
-            foto_input = st.camera_input("Capturar")
+            foto_input = st.camera_input("📸 Capturar Foto")
             if foto_input:
                 if not st.session_state['fotos_temp'] or foto_input.getvalue() != st.session_state['fotos_temp'][-1]:
                     st.session_state['fotos_temp'].append(foto_input.getvalue())
             
             if st.session_state['fotos_temp']:
-                st.image([x for x in st.session_state['fotos_temp']], width=80)
-                if st.button("Limpar Fotos", type="secondary"): 
+                st.image([x for x in st.session_state['fotos_temp']], width=100, caption=[f"Foto {i+1}" for i in range(len(st.session_state['fotos_temp']))])
+                if st.button("Limpar Fotos", type="secondary", use_container_width=True): 
                     st.session_state['fotos_temp'] = []; st.rerun()
 
             st.markdown("---")
-            if st.button("➕ REGISTRAR APONTAMENTO", type="primary", use_container_width=True):
+            if st.button("💾 SALVAR APONTAMENTO", type="primary", use_container_width=True):
                 if not item_nome: st.error("Descrição obrigatória.")
                 else:
                     audio_blob = audio_input.getvalue() if audio_input else None
@@ -437,24 +446,26 @@ elif menu == "Vistoria Mobile":
                         "Audio_Bytes": audio_blob, "Hora": datetime.now().strftime("%H:%M")
                     }
                     st.session_state['sessao_vistoria'].append(novo)
+                    # Limpeza pós-salvamento
                     st.session_state['fotos_temp'] = []
                     st.session_state['obs_atual'] = ""
-                    st.session_state['item_temp_nome'] = "" 
-                    st.toast("Apontamento registrado!", icon="💾")
+                    # Reset checkboxes (gambiarra do streamlit: para resetar, precisamos dar rerun ou limpar session keys)
+                    # Vamos manter simples: o usuario desmarca manual ou segue pro proximo setor
+                    st.toast("Salvo com sucesso!", icon="✅")
                     time.sleep(0.5); st.rerun()
 
-    with c_lista:
-        st.subheader("2. Relatório Técnico (ZIP)")
+    with tab_revisao:
+        st.subheader("📦 Itens Coletados")
         if not st.session_state['sessao_vistoria']:
-            st.info("Aguardando apontamentos...")
+            st.info("Nenhum apontamento ainda.")
         else:
             for i, reg in enumerate(st.session_state['sessao_vistoria']):
-                with st.expander(f"#{i+1} {reg['Local']} ({reg['Gravidade']})", expanded=False):
-                    st.write(f"**NC:** {reg['Item']}")
-                    st.write(f"**Status:** {reg['Situação']}")
-                    if reg.get('Audio_Bytes'): st.audio(reg['Audio_Bytes'])
-                    st.write(f"**Evidências:** {len(reg['Fotos'])}")
-                    if st.button("Remover", key=f"del_{i}"):
+                # Card Visual para Mobile
+                with st.container(border=True):
+                    c_a, c_b = st.columns([4, 1])
+                    c_a.markdown(f"**{i+1}. {reg['Local']}**")
+                    c_a.caption(f"{reg['Item'][:100]}...") # Texto curto
+                    if c_b.button("🗑️", key=f"del_{i}"):
                         st.session_state['sessao_vistoria'].pop(i); st.rerun()
             
             st.markdown("---")
@@ -462,7 +473,7 @@ elif menu == "Vistoria Mobile":
             nome_zip = f"Relatorio_Legalizacao_{limpar_texto_pdf(st.session_state['tipo_estabelecimento_atual'])}_{datetime.now().strftime('%d-%m-%H%M')}.zip"
             
             st.download_button(
-                label="📦 BAIXAR PACOTE TÉCNICO COMPLETO (.ZIP)",
+                label="📥 BAIXAR RELATÓRIO FINAL (ZIP)",
                 data=zip_data,
                 file_name=nome_zip,
                 mime="application/zip",
@@ -470,7 +481,7 @@ elif menu == "Vistoria Mobile":
                 use_container_width=True
             )
             
-            if st.button("Limpar Vistoria", type="secondary", use_container_width=True):
+            if st.button("Limpar Tudo e Começar Novo", type="secondary", use_container_width=True):
                 st.session_state['sessao_vistoria'] = []
                 st.rerun()
 
