@@ -190,7 +190,147 @@ def adicionar_tarefas_sugeridas(df_checklist, id_doc, tarefas):
     if novas: return pd.concat([df_checklist, pd.DataFrame(novas)], ignore_index=True)
     return df_checklist
 
-# --- FUNÇÃO DE TRANSCRIÇÃO ---
+def get_creds():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds_dict = st.secrets["gcp_service_account"]
+    return ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+
+def conectar_gsheets():
+    creds = get_creds()
+    client = gspread.authorize(creds)
+    return client.open("LegalizaHealth_DB")
+
+def upload_foto_drive(foto_binaria, nome_arquivo):
+    if not ID_PASTA_DRIVE: return ""
+    try:
+        creds = get_creds()
+        service = build('drive', 'v3', credentials=creds)
+        file_metadata = {'name': nome_arquivo, 'parents': [ID_PASTA_DRIVE]}
+        media = MediaIoBaseUpload(foto_binaria, mimetype='image/jpeg')
+        file = service.files().create(body=file_metadata, media_body=media, fields='id, webContentLink').execute()
+        return file.get('webContentLink', '')
+    except Exception as e:
+        st.error(f"Erro Drive: {e}")
+        return ""
+
+def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
+    try:
+        requests.post(f"https://ntfy.sh/{TOPICO_NOTIFICACAO}",
+                      data=mensagem.encode('utf-8'),
+                      headers={"Title": titulo.encode('utf-8'), "Priority": prioridade, "Tags": "hospital"})
+        return True
+    except: return False
+
+@st.cache_data(ttl=60)
+def carregar_tudo_inicial():
+    try:
+        sh = conectar_gsheets()
+        ws_prazos = sh.worksheet("Prazos")
+        df_prazos = pd.DataFrame(ws_prazos.get_all_records())
+        try:
+            ws_check = sh.worksheet("Checklist_Itens")
+            df_check = pd.DataFrame(ws_check.get_all_records())
+        except:
+            ws_check = sh.add_worksheet("Checklist_Itens", 1000, 5)
+            ws_check.append_row(["Documento_Ref", "Tarefa", "Feito"])
+            df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+
+        colunas = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
+        for c in colunas:
+            if c not in df_prazos.columns: df_prazos[c] = ""
+            
+        if not df_prazos.empty:
+            df_prazos["Progresso"] = pd.to_numeric(df_prazos["Progresso"], errors='coerce').fillna(0).astype(int)
+            for col_txt in ['Unidade', 'Setor', 'Documento', 'Status', 'CNPJ']:
+                df_prazos[col_txt] = df_prazos[col_txt].astype(str).str.strip()
+            for c_date in ['Vencimento', 'Data_Recebimento']:
+                df_prazos[c_date] = pd.to_datetime(df_prazos[c_date], dayfirst=True, errors='coerce').dt.date
+            df_prazos = df_prazos[df_prazos['Unidade'] != ""]
+            df_prazos['ID_UNICO'] = df_prazos['Unidade'] + " - " + df_prazos['Documento']
+        
+        if df_check.empty: df_check = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+        else:
+            df_check['Documento_Ref'] = df_check['Documento_Ref'].astype(str)
+            df_check = df_check[df_check['Tarefa'] != ""]
+        return df_prazos, df_check
+    except Exception as e:
+        return pd.DataFrame(), pd.DataFrame()
+
+def get_dados():
+    if 'dados_cache' not in st.session_state or st.session_state['dados_cache'] is None:
+        st.session_state['dados_cache'] = carregar_tudo_inicial()
+    return st.session_state['dados_cache']
+
+def update_dados_local(df_p, df_c):
+    st.session_state['dados_cache'] = (df_p, df_c)
+
+def salvar_alteracoes_completo(df_prazos, df_checklist):
+    try:
+        sh = conectar_gsheets()
+        ws_prazos = sh.worksheet("Prazos")
+        ws_prazos.clear()
+        df_p = df_prazos.copy()
+        if 'ID_UNICO' in df_p.columns: df_p = df_p.drop(columns=['ID_UNICO'])
+        for c_date in ['Vencimento', 'Data_Recebimento']:
+            df_p[c_date] = df_p[c_date].apply(lambda x: x.strftime('%d/%m/%Y') if hasattr(x, 'strftime') else str(x))
+        df_p['Concluido'] = df_p['Concluido'].astype(str)
+        df_p['Progresso'] = df_p['Progresso'].apply(safe_prog)
+        colunas_ordem = ["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido"]
+        for c in colunas_ordem: 
+            if c not in df_p.columns: df_p[c] = ""
+        df_p = df_p[colunas_ordem]
+        ws_prazos.update([df_p.columns.values.tolist()] + df_p.values.tolist())
+        
+        ws_check = sh.worksheet("Checklist_Itens")
+        ws_check.clear()
+        df_c = df_checklist.copy()
+        df_c['Feito'] = df_c['Feito'].astype(str)
+        ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
+        st.cache_data.clear()
+        st.session_state['dados_cache'] = (df_prazos, df_checklist)
+        st.toast("✅ Dados Sincronizados com a Nuvem!", icon="☁️")
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar: {e}")
+        return False
+
+def salvar_vistoria_db(lista_itens):
+    try:
+        sh = conectar_gsheets()
+        try: ws = sh.worksheet("Vistorias")
+        except: ws = sh.add_worksheet("Vistorias", 1000, 10)
+        header = ws.row_values(1)
+        if "Foto_Link" not in header: ws.append_row(["Setor", "Item", "Situação", "Gravidade", "Obs", "Data", "Foto_Link"])
+        hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime("%d/%m/%Y")
+        progresso = st.progress(0, text="Salvando fotos...")
+        for i, item in enumerate(lista_itens):
+            link_foto = ""
+            if item.get('Foto_Binaria'):
+                nome_arq = f"Vist_{hoje.replace('/','-')}_{item['Item']}.jpg"
+                item['Foto_Binaria'].seek(0)
+                link_foto = upload_foto_drive(item['Foto_Binaria'], nome_arq)
+            ws.append_row([item['Setor'], item['Item'], item['Situação'], item['Gravidade'], item['Obs'], hoje, link_foto if link_foto else "FALHA_UPLOAD"])
+            progresso.progress((i + 1) / len(lista_itens))
+        progresso.empty()
+        st.toast("✅ Vistoria Registrada!", icon="☁️")
+    except Exception as e: st.error(f"Erro: {e}")
+
+def salvar_historico_editado(df_editado, data_selecionada):
+    try:
+        sh = conectar_gsheets()
+        ws = sh.worksheet("Vistorias")
+        todos_dados = pd.DataFrame(ws.get_all_records())
+        todos_dados = todos_dados[todos_dados['Data'] != data_selecionada]
+        df_editado['Data'] = data_selecionada
+        todos_dados = pd.concat([todos_dados, df_editado], ignore_index=True)
+        ws.clear()
+        ws.update([todos_dados.columns.values.tolist()] + todos_dados.values.tolist())
+        st.toast("Histórico Atualizado!")
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar histórico: {e}")
+        return False
+
 def transcrever_audio(audio_file):
     if not TEM_RECONHECIMENTO_VOZ: return "Erro: Biblioteca não instalada."
     r = sr.Recognizer()
@@ -205,7 +345,6 @@ def transcrever_audio(audio_file):
         return texto
     except: return ""
 
-# --- GERADOR DE ZIP (CORREÇÃO FINAL) ---
 class RelatorioPDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 14)
@@ -222,49 +361,35 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
     pdf = RelatorioPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 12)
-    
-    # Define largura efetiva da página (A4 - margens)
     epw = pdf.w - 2*pdf.l_margin 
-    
     total = len(itens_vistoria)
     criticos = sum(1 for i in itens_vistoria if i['Gravidade'] == 'CRÍTICO')
-    
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(0, 10, f"Resumo - {limpar_texto_pdf(tipo_estabelecimento)}", 1, 1, 'L', fill=True)
     pdf.set_font("Arial", "", 11)
     pdf.cell(0, 8, f"Total de Apontamentos: {total} | Pontos Criticos: {criticos}", 0, 1)
     pdf.ln(5)
-
     audios_para_zip = []
-
     for idx, item in enumerate(itens_vistoria):
         if pdf.get_y() > 250: pdf.add_page()
-        
         if item['Gravidade'] == 'CRÍTICO': pdf.set_fill_color(255, 200, 200)
         elif item['Gravidade'] == 'Alto': pdf.set_fill_color(255, 230, 200)
         else: pdf.set_fill_color(230, 255, 230)
-        
         local_safe = limpar_texto_pdf(item['Local'])
         item_safe = limpar_texto_pdf(item['Item'])
         obs_safe = limpar_texto_pdf(item['Obs'])
-        
         pdf.set_font("Arial", "B", 11)
         pdf.multi_cell(epw, 8, f"#{idx+1} - {local_safe}", 1, 'L', fill=True)
-        
         pdf.set_font("Arial", "B", 10)
         pdf.multi_cell(epw, 6, f"NC Identificada: {item_safe}")
-        
         pdf.set_font("Arial", "", 10)
         info_extra = ""
-        
         if item.get('Audio_Bytes'):
             nome_audio = f"Audio_Item_{idx+1}.wav"
             audios_para_zip.append((nome_audio, item['Audio_Bytes']))
             info_extra = f" [AUDIO ANEXO: {nome_audio}]"
-
         pdf.multi_cell(epw, 6, f"Status: {limpar_texto_pdf(item['Situação'])}\nGravidade: {limpar_texto_pdf(item['Gravidade'])}\nTecnica: {obs_safe}{info_extra}")
         pdf.ln(2)
-        
         if item['Fotos']:
             x_start = 10; y_start = pdf.get_y(); img_w = 45; img_h = 45
             for i, foto_bytes in enumerate(item['Fotos']):
@@ -280,75 +405,346 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
             pdf.set_y(y_start + img_h + 10)
         else: pdf.ln(5)
         pdf.line(10, pdf.get_y(), 200, pdf.get_y()); pdf.ln(5)
-
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-        # CORREÇÃO FINAL: FPDF2 JÁ RETORNA BYTES
         pdf_bytes = pdf.output() 
         zip_file.writestr(f"Relatorio_Vistoria_{datetime.now().strftime('%d-%m')}.pdf", pdf_bytes)
         for nome_arq, dados_audio in audios_para_zip:
             if hasattr(dados_audio, 'getvalue'): zip_file.writestr(nome_arq, dados_audio.getvalue())
             else: zip_file.writestr(nome_arq, dados_audio)
-                
     return zip_buffer.getvalue()
 
+def gerar_pdf(vistorias):
+    pdf = PDF()
+    pdf.add_page()
+    for i, item in enumerate(vistorias):
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, f"Item #{i+1}: {limpar_txt(item.get('Item', ''))}", 0, 1)
+        pdf.set_font("Arial", size=10)
+        pdf.multi_cell(0, 6, f"Local: {limpar_txt(item.get('Setor',''))}\nObs: {limpar_txt(item.get('Obs',''))}")
+        img = None
+        if 'Foto_Binaria' in item and item['Foto_Binaria']: img = item['Foto_Binaria']
+        elif 'Foto_Link' in item and str(item['Foto_Link']).startswith('http'): img = baixar_imagem_url(item['Foto_Link'])
+        if img:
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
+                    t.write(img.getvalue() if hasattr(img, 'getvalue') else img.read())
+                    pdf.image(t.name, x=10, w=80)
+            except: pass
+        pdf.ln(5)
+    return bytes(pdf.output(dest='S'))
+
 # --- INTERFACE ---
+if 'vistorias' not in st.session_state: st.session_state['vistorias'] = []
 if 'sessao_vistoria' not in st.session_state: st.session_state['sessao_vistoria'] = []
 if 'fotos_temp' not in st.session_state: st.session_state['fotos_temp'] = []
 if 'obs_atual' not in st.session_state: st.session_state['obs_atual'] = ""
 if 'tipo_estabelecimento_atual' not in st.session_state: st.session_state['tipo_estabelecimento_atual'] = "🏥 Hospital / Clínica / Laboratório"
 if 'checks_temp' not in st.session_state: st.session_state['checks_temp'] = {}
+if 'last_notify_critico' not in st.session_state: st.session_state['last_notify_critico'] = datetime.min
+if 'last_notify_alto' not in st.session_state: st.session_state['last_notify_alto'] = datetime.min
+if 'doc_focado_id' not in st.session_state: st.session_state['doc_focado_id'] = None
+if 'filtro_dash' not in st.session_state: st.session_state['filtro_dash'] = "TODOS"
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v49.2 - Correção Final PDF")
+    st.caption("v50.0 - Integração Total")
+
+# --- ROBÔ ---
+try:
+    agora = datetime.now()
+    diff_crit = (agora - st.session_state['last_notify_critico']).total_seconds() / 60
+    diff_alto = (agora - st.session_state['last_notify_alto']).total_seconds() / 60
+    df_alertas = get_dados()[0]
+    if df_alertas is not None:
+        msgs_crit = []
+        msgs_alto = []
+        hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).date()
+        for index, row in df_alertas.iterrows():
+            try:
+                doc_nome = str(row['Documento'])
+                if "SELECIONE" in doc_nome or "PENDENTE" in doc_nome: continue
+                if row['Status'] == "NORMAL": continue
+                prog = safe_prog(row['Progresso'])
+                if prog >= 100: continue
+                dias = (row['Vencimento'] - hoje).days
+                unidade = row['Unidade']
+                risco = row['Status']
+                msg = f"🏥 {unidade}\n📄 {doc_nome}\n⏳ Vence em {dias} dias"
+                if risco == "CRÍTICO" and (dias <= 5 or dias < 0): msgs_crit.append(msg)
+                elif risco == "ALTO" and (dias <= 5 or dias < 0): msgs_alto.append(msg)
+            except: pass
+        if msgs_crit and diff_crit >= 60:
+            corpo = "\n----------------\n".join(msgs_crit[:10])
+            if enviar_notificacao_push("🚨 ALERTA CRÍTICO (1h)", corpo, "high"): st.session_state['last_notify_critico'] = agora
+        if msgs_alto and diff_alto >= 180:
+            corpo = "\n----------------\n".join(msgs_alto[:10])
+            if enviar_notificacao_push("🟠 ALERTA ALTO (3h)", corpo, "default"): st.session_state['last_notify_alto'] = agora
+except Exception as e: pass
 
 # --- TELAS ---
 if menu == "Painel Geral":
-    st.title("Painel Geral")
-    st.info("Módulo carregado.")
+    st.title("Painel de Controle Estratégico")
+    df_p, _ = get_dados()
+    if df_p.empty:
+        st.warning("Ainda não há documentos cadastrados. Adicione na aba 'Gestão de Docs'.")
+        st.stop()
+    n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
+    n_alto = len(df_p[df_p['Status'] == "ALTO"])
+    n_norm = len(df_p[df_p['Status'] == "NORMAL"])
+    c1, c2, c3, c4 = st.columns(4)
+    if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
+    if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
+    if c3.button(f"🟢 NORMAL: {n_norm}", use_container_width=True): st.session_state['filtro_dash'] = "NORMAL"
+    if c4.button(f"📋 TOTAL: {len(df_p)}", use_container_width=True): st.session_state['filtro_dash'] = "TODOS"
+    st.markdown("---")
+    busca_painel = st.text_input("🔎 Buscar Unidade/Documento", placeholder="Ex: gravatai, crm, alvara...")
+    f_atual = st.session_state['filtro_dash']
+    st.subheader(f"Lista de Processos: {f_atual}")
+    df_show = df_p.copy()
+    if f_atual != "TODOS": df_show = df_show[df_show['Status'] == f_atual]
+    if busca_painel:
+        termo = normalizar_texto(busca_painel)
+        df_show = df_show[df_show.apply(lambda row: termo in normalizar_texto(str(row.values)), axis=1)]
+    if not df_show.empty:
+        st.dataframe(df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], use_container_width=True, hide_index=True, column_config={"Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"), "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"), "Status": st.column_config.TextColumn("Risco", width="small")})
+    else: st.info("Nenhum item encontrado.")
+    st.markdown("---")
+    st.subheader("Panorama")
+    if not df_p.empty and TEM_PLOTLY:
+        status_counts = df_p['Status'].value_counts()
+        fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6, color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
+        fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
+        st.plotly_chart(fig, use_container_width=True)
+        media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
+        st.metric("Progressão Geral", f"{media}%")
+        st.progress(media)
+
 elif menu == "Gestão de Docs":
-    st.title("Gestão de Docs")
-    st.info("Módulo carregado.")
+    st.title("Gestão de Documentos")
+    df_prazos, df_checklist = get_dados()
+    with st.expander("🔍 FILTROS", expanded=True):
+        f1, f2, f3 = st.columns(3)
+        lista_uni = ["Todas"] + sorted(list(df_prazos['Unidade'].unique())) if 'Unidade' in df_prazos.columns else ["Todas"]
+        f_uni = f1.selectbox("Unidade:", lista_uni)
+        f_stt = f2.multiselect("Status:", ["CRÍTICO", "ALTO", "NORMAL"])
+        f_txt = f3.text_input("Buscar Inteligente (Nome/CNPJ/Setor):")
+        if st.button("Limpar"): st.rerun()
+    df_show = df_prazos.copy()
+    if f_uni != "Todas": df_show = df_show[df_show['Unidade'] == f_uni]
+    if f_stt: df_show = df_show[df_show['Status'].isin(f_stt)]
+    if f_txt:
+        termo = normalizar_texto(f_txt)
+        df_show = df_show[df_show.apply(lambda row: termo in normalizar_texto(str(row.values)), axis=1)]
+    col_l, col_d = st.columns([1.2, 2])
+    with col_l:
+        st.info(f"Lista ({len(df_show)})")
+        sel = st.dataframe(df_show[['Unidade', 'Documento', 'Status']], use_container_width=True, hide_index=True, selection_mode="single-row", on_select="rerun", column_config={"Status": st.column_config.TextColumn("Risco", width="small")})
+        if len(sel.selection.rows) > 0:
+            idx_real = sel.selection.rows[0]
+            doc_selecionado_id = df_show.iloc[idx_real]['ID_UNICO']
+            st.session_state['doc_focado_id'] = doc_selecionado_id
+        doc_ativo_id = st.session_state.get('doc_focado_id')
+        st.markdown("---")
+        with st.expander("➕ Novo Documento (Manual)"):
+            with st.form("new_doc", clear_on_submit=True):
+                n_u = st.text_input("Unidade"); n_s = st.text_input("Setor"); n_d = st.selectbox("Documento", options=LISTA_TIPOS_DOCUMENTOS); n_c = st.text_input("CNPJ")
+                if st.form_submit_button("ADICIONAR"):
+                    if n_u and n_d and n_c:
+                        risco_sug, venc_sug, link_sug, tarefas_sug = aplicar_inteligencia_doc(n_d)
+                        novo = {"Unidade": n_u, "Setor": n_s, "Documento": n_d, "CNPJ": n_c, "Data_Recebimento": date.today(), "Vencimento": venc_sug, "Status": risco_sug, "Progresso": 0, "Concluido": "False"}
+                        df_temp = pd.concat([pd.DataFrame([novo]), df_prazos], ignore_index=True)
+                        df_temp['ID_UNICO'] = df_temp['Unidade'] + " - " + df_temp['Documento']
+                        if tarefas_sug: df_checklist = adicionar_tarefas_sugeridas(df_checklist, df_temp['ID_UNICO'].iloc[0], tarefas_sug)
+                        update_dados_local(df_temp, df_checklist)
+                        st.toast(f"Criado! Checklist sugerido carregado.", icon="✅")
+                        st.rerun()
+                    else: st.error("Preencha Unidade, Documento e CNPJ.")
+        st.markdown("---")
+        with st.expander("⬆️ Importar Unidades/CNPJ (Excel/CSV)"):
+            import_file = st.file_uploader("Carregar arquivo (.xlsx ou .csv)", type=['xlsx', 'csv'], key="uploader_import_mass")
+            if import_file:
+                df_novo = pd.DataFrame()
+                try:
+                    try: df_novo = pd.read_excel(import_file)
+                    except:
+                        import_file.seek(0)
+                        try: df_novo = pd.read_csv(import_file, sep=';', encoding='latin-1')
+                        except: 
+                            import_file.seek(0)
+                            df_novo = pd.read_csv(import_file, sep=',', encoding='utf-8')
+                    if not df_novo.empty:
+                        df_novo.columns = df_novo.columns.str.strip()
+                        if 'Nome da unidade' in df_novo.columns and 'CNPJ' in df_novo.columns:
+                            df_import = df_novo[['Nome da unidade', 'CNPJ']].copy()
+                            df_import = df_import.rename(columns={'Nome da unidade': 'Unidade'})
+                            st.write("### 🔎 Pré-visualização:")
+                            st.dataframe(df_import.head(5), use_container_width=True)
+                            if st.button(f"✅ Confirmar Importação", type="primary"):
+                                df_import['Setor'] = ""
+                                df_import['Documento'] = "⚠️ SELECIONE O TIPO"
+                                df_import['Data_Recebimento'] = date.today()
+                                df_import['Vencimento'] = date.today()
+                                df_import['Status'] = "NORMAL"
+                                df_import['Progresso'] = 0
+                                df_import['Concluido'] = "False"
+                                df_import['Unidade'] = df_import['Unidade'].astype(str)
+                                df_import['CNPJ'] = df_import['CNPJ'].astype(str)
+                                df_import['ID_UNICO'] = df_import['Unidade'] + " - " + df_import['CNPJ'] + " - " + df_import['Documento']
+                                df_combinado = pd.concat([df_prazos, df_import], ignore_index=True)
+                                df_combinado = df_combinado.drop_duplicates(subset=['ID_UNICO'], keep='last').reset_index(drop=True)
+                                salvar_alteracoes_completo(df_combinado, df_checklist)
+                                st.success(f"✅ {len(df_import)} importados!")
+                                st.balloons()
+                                time.sleep(1)
+                                st.rerun()
+                        else: st.error(f"Necessário colunas 'Nome da unidade' e 'CNPJ'.")
+                except Exception as e: st.error(f"Erro: {e}")
+        st.markdown("---")
+        with st.expander("🗑️ ZONA DE PERIGO (Excluir Tudo)"):
+            st.warning("Atenção: Isso apagará TODOS os documentos e tarefas.")
+            confirm = st.checkbox("Sim, quero excluir tudo")
+            if confirm:
+                if st.button("❌ EXCLUIR TODA A LISTA", type="primary"):
+                    df_prazos = pd.DataFrame(columns=["Unidade", "Setor", "Documento", "CNPJ", "Data_Recebimento", "Vencimento", "Status", "Progresso", "Concluido", "ID_UNICO"])
+                    df_checklist = pd.DataFrame(columns=["Documento_Ref", "Tarefa", "Feito"])
+                    salvar_alteracoes_completo(df_prazos, df_checklist)
+                    st.session_state['doc_focado_id'] = None
+                    st.success("Tudo excluído!")
+                    time.sleep(1)
+                    st.rerun()
+    with col_d:
+        if doc_ativo_id:
+            indices = df_prazos[df_prazos['ID_UNICO'] == doc_ativo_id].index
+            if not indices.empty:
+                idx = indices[0]
+                doc_nome = df_prazos.at[idx, 'Documento']
+                c_tit, c_edit_btn = st.columns([4, 1])
+                opcoes_docs = LISTA_TIPOS_DOCUMENTOS.copy()
+                if doc_nome not in opcoes_docs: opcoes_docs.insert(0, doc_nome) 
+                try: idx_atual = opcoes_docs.index(doc_nome)
+                except: idx_atual = 0
+                novo_nome_doc = c_tit.selectbox("Tipo de Documento", options=opcoes_docs, index=idx_atual, key=f"nome_doc_{doc_ativo_id}")
+                _, _, link_inteligente, tarefas_inteligentes = aplicar_inteligencia_doc(novo_nome_doc)
+                if novo_nome_doc != doc_nome:
+                     if c_edit_btn.button("Salvar Tipo"):
+                        antigo_id = doc_ativo_id
+                        nova_unidade = df_prazos.at[idx, 'Unidade']
+                        cnpj_atual = df_prazos.at[idx, 'CNPJ']
+                        risco_sug, venc_sug, _, _ = aplicar_inteligencia_doc(novo_nome_doc, df_prazos.at[idx, 'Data_Recebimento'])
+                        df_prazos.at[idx, 'Status'] = risco_sug
+                        df_prazos.at[idx, 'Vencimento'] = venc_sug
+                        novo_id = nova_unidade + " - " + cnpj_atual + " - " + novo_nome_doc
+                        df_prazos.at[idx, 'Documento'] = novo_nome_doc
+                        df_prazos.at[idx, 'ID_UNICO'] = novo_id
+                        df_checklist.loc[df_checklist['Documento_Ref'] == antigo_id, 'Documento_Ref'] = novo_id
+                        update_dados_local(df_prazos, df_checklist)
+                        st.session_state['doc_focado_id'] = novo_id
+                        st.toast(f"Atualizado! Risco sugerido: {risco_sug}", icon="🧠")
+                        st.rerun()
+                st.caption(f"Unidade: {df_prazos.at[idx, 'Unidade']} | Setor: {df_prazos.at[idx, 'Setor']} | CNPJ: {df_prazos.at[idx, 'CNPJ']}")
+                if link_inteligente: st.link_button(f"🌎 Pesquisar {novo_nome_doc}", link_inteligente)
+                c_del, _ = st.columns([1, 4])
+                if c_del.button("🗑️ Excluir"):
+                    df_prazos = df_prazos.drop(idx).reset_index(drop=True)
+                    df_checklist = df_checklist[df_checklist['Documento_Ref'] != doc_ativo_id]
+                    update_dados_local(df_prazos, df_checklist)
+                    st.session_state['doc_focado_id'] = None
+                    st.rerun()
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns(3)
+                    st_curr = df_prazos.at[idx, 'Status']
+                    opcoes = ["NORMAL", "ALTO", "CRÍTICO"]
+                    if st_curr not in opcoes: st_curr = "NORMAL"
+                    novo_risco = c1.selectbox("Risco", opcoes, index=opcoes.index(st_curr), key=f"sel_r_{doc_ativo_id}")
+                    if novo_risco != st_curr:
+                         df_prazos.at[idx, 'Status'] = novo_risco
+                         update_dados_local(df_prazos, df_checklist)
+                    cor_badge = "#ff4b4b" if st_curr == "CRÍTICO" else "#ffa726" if st_curr == "ALTO" else "#00c853"
+                    c1.markdown(f'<span style="background-color:{cor_badge}; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; color: white;">Status: {st_curr}</span>', unsafe_allow_html=True)
+                    novo_setor = st.text_input("Editar Setor", value=df_prazos.at[idx, 'Setor'], key=f"edit_sector_{doc_ativo_id}")
+                    if novo_setor != df_prazos.at[idx, 'Setor']:
+                        df_prazos.at[idx, 'Setor'] = novo_setor
+                        update_dados_local(df_prazos, df_checklist)
+                    try: d_rec = pd.to_datetime(df_prazos.at[idx, 'Data_Recebimento'], dayfirst=True).date()
+                    except: d_rec = date.today()
+                    nova_d_rec = c2.date_input("Recebido", value=d_rec, format="DD/MM/YYYY", key=f"dt_rec_{doc_ativo_id}")
+                    if nova_d_rec != d_rec:
+                        df_prazos.at[idx, 'Data_Recebimento'] = nova_d_rec
+                        update_dados_local(df_prazos, df_checklist)
+                    try: d_venc = pd.to_datetime(df_prazos.at[idx, 'Vencimento'], dayfirst=True).date()
+                    except: d_venc = date.today()
+                    nova_d_venc = c3.date_input("Vence", value=d_venc, format="DD/MM/YYYY", key=f"dt_venc_{doc_ativo_id}")
+                    if nova_d_venc != d_venc:
+                        df_prazos.at[idx, 'Vencimento'] = nova_d_venc
+                        update_dados_local(df_prazos, df_checklist)
+                    prog_atual = safe_prog(df_prazos.at[idx, 'Progresso'])
+                    prog_bar_placeholder = st.empty()
+                    prog_bar_placeholder.progress(prog_atual, text=f"Progressão: {prog_atual}%")
+                st.write("✅ **Tarefas (Edição Rápida)**")
+                df_checklist['Feito'] = df_checklist['Feito'].replace({'TRUE': True, 'FALSE': False, 'True': True, 'False': False, 'nan': False})
+                df_checklist['Feito'] = df_checklist['Feito'].fillna(False).astype(bool)
+                df_checklist['Documento_Ref'] = df_checklist['Documento_Ref'].astype(str)
+                mask = df_checklist['Documento_Ref'] == str(doc_ativo_id)
+                df_t = df_checklist[mask].copy().reset_index(drop=True)
+                tarefas_existentes = df_t['Tarefa'].tolist()
+                ha_novas_sugestoes = any(t for t in tarefas_inteligentes if t not in tarefas_existentes)
+                if ha_novas_sugestoes:
+                    if st.button("📥 Carregar Checklist Sugerido", key=f"load_tasks_{doc_ativo_id}"):
+                        df_checklist = adicionar_tarefas_sugeridas(df_checklist, doc_ativo_id, tarefas_inteligentes)
+                        update_dados_local(df_prazos, df_checklist)
+                        st.rerun()
+                c_add, c_btn = st.columns([3, 1])
+                new_t = c_add.text_input("Nova tarefa...", label_visibility="collapsed", key=f"new_t_{doc_ativo_id}")
+                if c_btn.button("ADICIONAR", key=f"btn_add_{doc_ativo_id}"):
+                    if new_t:
+                        line = pd.DataFrame([{"Documento_Ref": doc_ativo_id, "Tarefa": new_t, "Feito": False}])
+                        df_checklist = pd.concat([df_checklist, line], ignore_index=True)
+                        update_dados_local(df_prazos, df_checklist)
+                        st.rerun()
+                if not df_t.empty:
+                    edited = st.data_editor(df_t, num_rows="dynamic", use_container_width=True, hide_index=True, column_config={"Documento_Ref": None, "Tarefa": st.column_config.TextColumn("Descrição", width="medium"), "Feito": st.column_config.CheckboxColumn("OK", width="small")}, key=f"ed_{doc_ativo_id}")
+                    tot = len(edited); done = edited['Feito'].sum(); new_p = int((done/tot)*100) if tot > 0 else 0
+                    prog_bar_placeholder.progress(new_p, text=f"Progressão: {new_p}%")
+                    if not edited.equals(df_t) or new_p != prog_atual:
+                        df_prazos.at[idx, 'Progresso'] = new_p
+                        df_checklist = df_checklist[~mask]
+                        edited['Documento_Ref'] = str(doc_ativo_id)
+                        df_checklist = pd.concat([df_checklist, edited], ignore_index=True)
+                        update_dados_local(df_prazos, df_checklist)
+                        st.rerun()
+                else: st.info("Adicione tarefas acima.")
+                st.markdown("---")
+                if st.button("💾 SALVAR TUDO NA NUVEM", type="primary"):
+                    if salvar_alteracoes_completo(df_prazos, df_checklist): time.sleep(0.5); st.rerun()
+            else:
+                st.warning("Documento não encontrado.")
+                if st.button("Voltar"): st.session_state['doc_focado_id'] = None; st.rerun()
+        else: st.info("👈 Selecione um documento na lista.")
 
 elif menu == "Vistoria Mobile":
     st.title("📋 Vistoria Técnica")
-    
     st.write("📍 **Contexto da Vistoria**")
-    
     if st.session_state['tipo_estabelecimento_atual'] not in CONTEXT_DATA.keys():
         st.session_state['tipo_estabelecimento_atual'] = list(CONTEXT_DATA.keys())[0]
-        
-    tipo_estab = st.selectbox(
-        "Tipo de Estabelecimento", 
-        options=list(CONTEXT_DATA.keys()),
-        index=list(CONTEXT_DATA.keys()).index(st.session_state['tipo_estabelecimento_atual'])
-    )
+    tipo_estab = st.selectbox("Tipo de Estabelecimento", options=list(CONTEXT_DATA.keys()), index=list(CONTEXT_DATA.keys()).index(st.session_state['tipo_estabelecimento_atual']))
     if tipo_estab != st.session_state['tipo_estabelecimento_atual']:
         st.session_state['tipo_estabelecimento_atual'] = tipo_estab
         st.session_state['checks_temp'] = {} 
         st.rerun()
-
     st.markdown("---")
-
     qtd_itens = len(st.session_state['sessao_vistoria'])
     st.progress(min(qtd_itens * 5, 100), text=f"Apontamentos na Sessão: {qtd_itens}")
-
     tab_coleta, tab_revisao = st.tabs(["📸 Coleta de Dados", "📄 Revisar & Baixar"])
-
     with tab_coleta:
         with st.container(border=True):
             contexto_atual = CONTEXT_DATA[st.session_state['tipo_estabelecimento_atual']]
             lista_setores = contexto_atual["setores"]
             mapa_sugestoes = contexto_atual["sugestoes"]
-
             local = st.selectbox("1. Setor / Área", lista_setores)
-            
             sugestoes = mapa_sugestoes.get(local, mapa_sugestoes["DEFAULT"])
-            
             selecionados_agora = []
-            
             if sugestoes:
                 st.info(f"👇 Toque para selecionar NCs em **{local}**:")
                 with st.expander("🔍 Lista de Problemas Comuns (Toque aqui)", expanded=True):
@@ -356,62 +752,46 @@ elif menu == "Vistoria Mobile":
                         chave_chk = f"{local}_{sug}"
                         if st.checkbox(sug, key=chave_chk):
                             selecionados_agora.append(sug)
-            
             texto_automatico = ""
             if selecionados_agora:
                 texto_automatico = " + ".join(selecionados_agora)
-            
             st.markdown("---")
             st.write("2. Descrição da Não Conformidade")
-            
             item_nome = st.text_area("Descrição Técnica", value=texto_automatico, height=150, help="O texto aqui será salvo no relatório. Você pode editar.")
-            
             c1, c2 = st.columns(2)
             situacao = c1.radio("Status", ["❌ Não Conforme", "⚠️ Parcial", "✅ Conforme"], horizontal=False)
             gravidade = c2.select_slider("Risco", options=["Baixo", "Médio", "Alto", "CRÍTICO"], value="Alto")
-            
             st.markdown("---")
             st.write("3. Evidências (Voz e Foto)")
-            
             audio_input = st.audio_input("🎙️ Gravar Nota", key="mic_input")
             if audio_input and TEM_RECONHECIMENTO_VOZ:
                 txt = transcrever_audio(audio_input)
                 if txt and txt not in st.session_state['obs_atual']:
                     st.session_state['obs_atual'] += " " + txt
-            
             obs = st.text_area("Detalhes Adicionais", value=st.session_state['obs_atual'], height=100, placeholder="Ex: Piso quebrado próximo à porta...")
             if obs != st.session_state['obs_atual']: st.session_state['obs_atual'] = obs
-
             foto_input = st.camera_input("📸 Capturar Foto")
             if foto_input:
                 if not st.session_state['fotos_temp'] or foto_input.getvalue() != st.session_state['fotos_temp'][-1]:
                     st.session_state['fotos_temp'].append(foto_input.getvalue())
-            
             if st.session_state['fotos_temp']:
                 st.image([x for x in st.session_state['fotos_temp']], width=100, caption=[f"Foto {i+1}" for i in range(len(st.session_state['fotos_temp']))])
                 if st.button("Limpar Fotos", type="secondary", use_container_width=True): 
                     st.session_state['fotos_temp'] = []; st.rerun()
-
             st.markdown("---")
             if st.button("💾 SALVAR APONTAMENTO", type="primary", use_container_width=True):
                 if not item_nome: st.error("Descrição obrigatória.")
                 else:
                     audio_blob = audio_input.getvalue() if audio_input else None
-                    novo = {
-                        "Local": local, "Item": item_nome, "Situação": situacao, "Gravidade": gravidade,
-                        "Obs": st.session_state['obs_atual'], "Fotos": st.session_state['fotos_temp'].copy(),
-                        "Audio_Bytes": audio_blob, "Hora": datetime.now().strftime("%H:%M")
-                    }
+                    novo = {"Local": local, "Item": item_nome, "Situação": situacao, "Gravidade": gravidade, "Obs": st.session_state['obs_atual'], "Fotos": st.session_state['fotos_temp'].copy(), "Audio_Bytes": audio_blob, "Hora": datetime.now().strftime("%H:%M")}
                     st.session_state['sessao_vistoria'].append(novo)
                     st.session_state['fotos_temp'] = []
                     st.session_state['obs_atual'] = ""
                     st.toast("Salvo com sucesso!", icon="✅")
                     time.sleep(0.5); st.rerun()
-
     with tab_revisao:
         st.subheader("📦 Itens Coletados")
-        if not st.session_state['sessao_vistoria']:
-            st.info("Nenhum apontamento ainda.")
+        if not st.session_state['sessao_vistoria']: st.info("Nenhum apontamento ainda.")
         else:
             for i, reg in enumerate(st.session_state['sessao_vistoria']):
                 with st.container(border=True):
@@ -420,24 +800,35 @@ elif menu == "Vistoria Mobile":
                     c_a.caption(f"{reg['Item'][:100]}...")
                     if c_b.button("🗑️", key=f"del_{i}"):
                         st.session_state['sessao_vistoria'].pop(i); st.rerun()
-            
             st.markdown("---")
             zip_data = gerar_pacote_zip_completo(st.session_state['sessao_vistoria'], st.session_state['tipo_estabelecimento_atual'])
             nome_zip = f"Relatorio_Legalizacao_{limpar_texto_pdf(st.session_state['tipo_estabelecimento_atual'])}_{datetime.now().strftime('%d-%m-%H%M')}.zip"
-            
-            st.download_button(
-                label="📥 BAIXAR RELATÓRIO FINAL (ZIP)",
-                data=zip_data,
-                file_name=nome_zip,
-                mime="application/zip",
-                type="primary",
-                use_container_width=True
-            )
-            
+            st.download_button(label="📥 BAIXAR RELATÓRIO FINAL (ZIP)", data=zip_data, file_name=nome_zip, mime="application/zip", type="primary", use_container_width=True)
             if st.button("Limpar Tudo e Começar Novo", type="secondary", use_container_width=True):
-                st.session_state['sessao_vistoria'] = []
-                st.rerun()
+                st.session_state['sessao_vistoria'] = []; st.rerun()
 
 elif menu == "Relatórios":
-    st.title("Histórico de Relatórios")
-    st.info("Aqui você pode consultar relatórios antigos salvos no Banco de Dados.")
+    st.title("Relatórios")
+    tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
+    with tab1:
+        if st.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
+        if len(st.session_state['vistorias']) > 0:
+            pdf = gerar_pdf(st.session_state['vistorias'])
+            st.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
+    with tab2:
+        try:
+            sh = conectar_gsheets()
+            ws = sh.worksheet("Vistorias")
+            df_h = pd.DataFrame(ws.get_all_records())
+            if not df_h.empty:
+                sel = st.selectbox("Data:", df_h['Data'].unique())
+                df_f = df_h[df_h['Data'] == sel]
+                st.info("Edite ou exclua linhas abaixo e clique em Salvar Correções.")
+                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
+                c_save, c_down = st.columns(2)
+                if c_save.button("💾 Salvar Correções no Histórico"):
+                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
+                if c_down.button(f"📥 Baixar PDF"):
+                    pdf = gerar_pdf(df_f.to_dict('records'))
+                    st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
+        except: st.error("Sem histórico.")
