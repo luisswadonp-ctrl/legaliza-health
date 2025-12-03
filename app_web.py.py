@@ -40,52 +40,132 @@ TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_CHECK_ROBO = 60
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
-# --- 2. CÉREBRO DE INTELIGÊNCIA DINÂMICA (CONTEXTO) ---
-# Aqui definimos as regras para cada NICHO de mercado.
+# --- 2. CÉREBRO DE INTELIGÊNCIA DINÂMICA (NÍVEL SÊNIOR) ---
+# Focado em RDC 50, NBR 9050, Portarias e Normas Regulamentadoras
 CONTEXT_DATA = {
-    "🏥 Hospital / Clínica": {
-        "setores": ["Recepção", "Triagem", "Consultório", "Raio-X", "UTI", "Expurgo", "Cozinha", "DML", "Farmácia", "Almoxarifado", "Centro Cirúrgico", "Externo"],
+    "🏥 Hospital / Clínica / Laboratório": {
+        "setores": [
+            "Recepção/Acessibilidade", "Consultório Indiferenciado", "Consultório Gineco/Uro", 
+            "Sala de Procedimentos", "DML (Limpeza)", "Expurgo (Sujo)", "Esterilização (Limpo)", 
+            "Abrigo de Resíduos", "Cozinha/Copa", "Farmácia/CAF", "Raio-X/Imagem", "UTI", "Centro Cirúrgico"
+        ],
         "sugestoes": {
-            "UTI": ["Grade do leito baixada", "Sinalização de higienização faltante", "Equipamento sem calibração", "Lixo infectante aberto"],
-            "Farmácia": ["Medicamento vencido", "Temperatura ambiente alta", "Controle de psicotrópicos falho", "Umidade excessiva"],
-            "Expurgo": ["Descarte incorreto de perfurocortantes", "Sacos de lixo misturados", "Ambiente sujo", "Cheiro forte"],
-            "Raio-X": ["Luz vermelha queimada", "Porta sem blindagem", "Dosímetro ausente", "Avental de chumbo danificado"],
-            "Cozinha": ["Temperatura da Geladeira Inadequada", "Lixo sem tampa/pedal", "Ausência de touca/EPI", "Alimentos sem etiqueta"],
-            "DEFAULT": ["Lâmpada queimada", "Infiltração", "Piso quebrado", "Extintor vencido"]
+            "Recepção/Acessibilidade": [
+                "Balcão de atendimento sem rebaixo PNE (NBR 9050)",
+                "Sanitário PNE sem barras de apoio ou alarme de emergência",
+                "Área de giro 1.50m no sanitário PNE obstruída",
+                "Desnível de piso > 5mm sem rampa",
+                "Bebedouro não acessível (altura incorreta)"
+            ],
+            "Consultório Indiferenciado": [
+                "Ausência de lavatório para mãos (obrigatório)",
+                "Torneira com acionamento manual (exige comando não manual)",
+                "Piso/Parede com juntas ou rodapé não arredondado",
+                "Mobiliário com superfície porosa (madeira não tratada)",
+                "Lixeira sem acionamento por pedal"
+            ],
+            "Consultório Gineco/Uro": [
+                "Sanitário anexo não acessível ou ausente",
+                "Falta de área para troca de vestimenta",
+                "Foco de luz auxiliar inoperante"
+            ],
+            "DML (Limpeza)": [
+                "Tanque de lavagem único (necessário setorização)",
+                "Ausência de ralo sifonado",
+                "Armazenamento de saneantes sem estrado/pallet",
+                "Ventilação mecânica ineficiente/ausente"
+            ],
+            "Expurgo (Sujo)": [
+                "Cruzamento de fluxo limpo x sujo",
+                "Ausência de pia de lavagem profunda (vazia clínica)",
+                "Pistola de ar/água inoperante",
+                "Bancada de madeira ou material poroso"
+            ],
+            "Esterilização (Limpo)": [
+                "Autoclave sem registro de teste biológico/químico",
+                "Barreira física entre área suja/limpa inexistente",
+                "Ar condicionado sem controle de temperatura",
+                "Armazenamento de estéreis próximo ao teto/piso"
+            ],
+            "Abrigo de Resíduos": [
+                "Ausência de ponto de água e ralo",
+                "Área não telada (acesso de vetores)",
+                "Identificação de grupos (A, B, E) incorreta",
+                "Porta sem abertura para ventilação (veneziana)"
+            ],
+            "Farmácia/CAF": [
+                "Termohigrômetro não calibrado ou ausente",
+                "Armário de controlados (Port. 344) sem chave/segurança",
+                "Pallets de madeira (proibido em área limpa)",
+                "Medicamentos encostados na parede/teto"
+            ],
+            "Raio-X/Imagem": [
+                "Sinalização luminosa (luz vermelha) inoperante",
+                "Visor plumbífero com falha de vedação",
+                "Porta sem proteção radiológica (chumbo)",
+                "Ausência de sinalização 'Risco de Radiação' e 'Grávidas'"
+            ],
+            "DEFAULT": [
+                "Divergência entre Projeto (LTA) e Executado",
+                "Extintor vencido ou obstruído",
+                "Sinalização de rota de fuga fotoluminescente ausente",
+                "Iluminação de emergência inoperante",
+                "Certificado de dedetização vencido"
+            ]
         }
     },
-    "🏭 Indústria / Fábrica": {
-        "setores": ["Linha de Produção", "Estoque de Matéria Prima", "Expedição", "Refeitório", "Vestiário", "Caldeiras", "Manutenção", "Administrativo"],
+    "🏭 Indústria / Logística": {
+        "setores": ["Linha de Produção", "Estoque/Almoxarifado", "Vestiários", "Refeitório", "Caldeiras/Compressor", "Área Externa"],
         "sugestoes": {
-            "Linha de Produção": ["Operador sem EPI (Óculos/Luva)", "Máquina sem proteção (NR-12)", "Fios expostos", "Área de circulação obstruída"],
-            "Estoque de Matéria Prima": ["Empilhamento excessivo", "Material sem identificação", "Pallets quebrados", "Sinalização de solo apagada"],
-            "Caldeiras": ["Vazamento de vapor", "Manômetro quebrado", "Válvula de segurança travada", "Ausência de isolamento térmico"],
-            "Refeitório": ["Piso escorregadio", "Restos de comida expostos", "Bebedouro sujo"],
-            "DEFAULT": ["Extintor obstruído", "Sinalização de emergência apagada", "Lixo no chão", "Ruído excessivo"]
+            "Linha de Produção": [
+                "Máquinas sem proteção de partes móveis (NR-12)",
+                "Área de circulação obstruída/sem demarcação",
+                "Painel elétrico desobstruído ou sem tranca (NR-10)",
+                "Iluminação insuficiente (Luxímetro)"
+            ],
+            "Estoque/Almoxarifado": [
+                "Empilhamento acima da capacidade (risco de queda)",
+                "Extintores obstruídos por mercadoria",
+                "Estrutura de porta-pallets danificada",
+                "Ausência de rota de fuga demarcada no chão"
+            ],
+            "Vestiários": [
+                "Armários insuficientes para nº de funcionários (NR-24)",
+                "Piso escorregadio/sem antiderrapante",
+                "Ventilação inadequada"
+            ],
+            "DEFAULT": [
+                "AVCB vencido ou não condizente com layout",
+                "Ausência de SPDA (Para-raios) laudo",
+                "Descarte de efluentes irregular"
+            ]
         }
     },
-    "🛒 Mercado / Varejo": {
-        "setores": ["Frente de Caixa", "Gôndolas/Corredor", "Açougue", "Padaria", "Hortifruti", "Estoque", "Câmara Fria", "Doca de Recebimento"],
+    "🛒 Varejo de Alimentos (Mercado/Restaurante)": {
+        "setores": ["Área de Venda", "Cozinha/Manipulação", "Estoque Seco", "Câmara Fria", "Saneantes", "Lixo"],
         "sugestoes": {
-            "Açougue": ["Temperatura do balcão alta", "Carne sem etiqueta de validade", "Facas fora do suporte", "Uniforme sujo"],
-            "Padaria": ["Formas sujas", "Farinha no chão", "Validade do fermento vencida", "Ausência de tela milimétrica"],
-            "Gôndolas/Corredor": ["Produto vencido na prateleira", "Preço ausente", "Produto violado", "Carrinho obstruindo passagem"],
-            "Câmara Fria": ["Gelo acumulado no evaporador", "Porta não veda", "Temperatura acima do ideal", "Alimentos no chão (sem pallet)"],
-            "DEFAULT": ["Piso molhado sem placa", "Extintor vencido", "Iluminação fraca", "Ar condicionado sujo"]
-        }
-    },
-    "🏫 Escola / Educação": {
-        "setores": ["Sala de Aula", "Pátio", "Cantina", "Banheiros", "Biblioteca", "Laboratório", "Secretaria"],
-        "sugestoes": {
-            "Sala de Aula": ["Carteira quebrada", "Lousa danificada", "Ventilador oscilando", "Fiação exposta"],
-            "Pátio": ["Piso irregular (risco de queda)", "Brinquedo enferrujado", "Água parada"],
-            "Laboratório": ["Reagentes vencidos", "Vidraria quebrada", "Ausência de chuveiro de emergência"],
-            "DEFAULT": ["Extintor vencido", "Limpeza precária", "Lâmpada queimada"]
+            "Cozinha/Manipulação": [
+                "Fluxo cruzado (alimento cru x cozido)",
+                "Ausência de pia exclusiva para lavagem de mãos",
+                "Ausência de tela milimétrica nas janelas",
+                "Luminárias sem proteção contra estilhaços"
+            ],
+            "Câmara Fria": [
+                "Temperatura acima do permitido",
+                "Gelo acumulado nos evaporadores/piso",
+                "Alimentos armazenados diretamente no chão",
+                "Porta não veda corretamente (borracha)"
+            ],
+            "DEFAULT": [
+                "Licença Sanitária vencida",
+                "Manual de Boas Práticas desatualizado",
+                "Certificado de Limpeza de Caixa d'Água vencido"
+            ]
         }
     }
 }
 
-# Base de Documentos (Resumida para o código caber)
+# --- 2.1 BASE DE DOCUMENTOS ---
 DOC_INTELLIGENCE = {
     "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura", "tarefas": ["Renovação", "Taxa"]},
     "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+vigilancia", "tarefas": ["Protocolo VISA", "Manual Boas Práticas"]},
@@ -123,7 +203,7 @@ def normalizar_texto(texto):
 def limpar_texto_pdf(texto):
     if texto is None: return ""
     texto = str(texto)
-    texto = texto.replace("✅", "[OK]").replace("❌", "[IRREGULAR]").replace("⚠️", "[ATENCAO]")
+    texto = texto.replace("✅", "[OK]").replace("❌", "[NC]").replace("⚠️", "[!]") # NC = Não Conforme
     return texto.encode('latin-1', 'replace').decode('latin-1')
 
 def aplicar_inteligencia_doc(tipo_doc, data_base=None):
@@ -164,7 +244,7 @@ def transcrever_audio(audio_file):
 class RelatorioPDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 14)
-        self.cell(0, 10, 'Relatorio Tecnico - LegalizaHealth', 0, 1, 'C')
+        self.cell(0, 10, 'Relatorio de Vistoria Tecnica - Legalizacao', 0, 1, 'C')
         self.set_font('Arial', 'I', 10)
         self.cell(0, 10, f'Data: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
         self.ln(5)
@@ -182,9 +262,9 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
     criticos = sum(1 for i in itens_vistoria if i['Gravidade'] == 'CRÍTICO')
     
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(0, 10, f"Resumo Executivo - {limpar_texto_pdf(tipo_estabelecimento)}", 1, 1, 'L', fill=True)
+    pdf.cell(0, 10, f"Resumo - {limpar_texto_pdf(tipo_estabelecimento)}", 1, 1, 'L', fill=True)
     pdf.set_font("Arial", "", 11)
-    pdf.cell(0, 8, f"Total de Itens: {total} | Criticos: {criticos}", 0, 1)
+    pdf.cell(0, 8, f"Total de Apontamentos: {total} | Pontos Criticos: {criticos}", 0, 1)
     pdf.ln(5)
 
     audios_para_zip = []
@@ -201,7 +281,8 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
         obs_safe = limpar_texto_pdf(item['Obs'])
         
         pdf.set_font("Arial", "B", 11)
-        pdf.cell(0, 10, f"#{idx+1} - {local_safe} | {item_safe}", 1, 1, 'L', fill=True)
+        # Título multi-linha para caber múltiplos problemas
+        pdf.multi_cell(0, 8, f"#{idx+1} - {local_safe} | {item_safe}", 1, 'L', fill=True)
         
         pdf.set_font("Arial", "", 10)
         info_extra = ""
@@ -211,7 +292,7 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
             audios_para_zip.append((nome_audio, item['Audio_Bytes']))
             info_extra = f" [AUDIO ANEXO: {nome_audio}]"
 
-        pdf.multi_cell(0, 6, f"Situacao: {limpar_texto_pdf(item['Situação'])}\nGravidade: {limpar_texto_pdf(item['Gravidade'])}\nObs: {obs_safe}{info_extra}")
+        pdf.multi_cell(0, 6, f"Status: {limpar_texto_pdf(item['Situação'])}\nGravidade: {limpar_texto_pdf(item['Gravidade'])}\nTecnica: {obs_safe}{info_extra}")
         pdf.ln(2)
         
         if item['Fotos']:
@@ -244,13 +325,12 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
 if 'sessao_vistoria' not in st.session_state: st.session_state['sessao_vistoria'] = []
 if 'fotos_temp' not in st.session_state: st.session_state['fotos_temp'] = []
 if 'obs_atual' not in st.session_state: st.session_state['obs_atual'] = ""
-# Variável para guardar o tipo de estabelecimento da sessão
-if 'tipo_estabelecimento_atual' not in st.session_state: st.session_state['tipo_estabelecimento_atual'] = "🏥 Hospital / Clínica"
+if 'tipo_estabelecimento_atual' not in st.session_state: st.session_state['tipo_estabelecimento_atual'] = "🏥 Hospital / Clínica / Laboratório"
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v46.0 - Contexto Multi-Setor")
+    st.caption("v48.0 - Analista Legalização SR")
 
 # --- TELAS ---
 if menu == "Painel Geral":
@@ -261,74 +341,78 @@ elif menu == "Gestão de Docs":
     st.info("Módulo carregado.")
 
 elif menu == "Vistoria Mobile":
-    st.title("📋 Vistoria Inteligente")
+    st.title("📋 Vistoria Técnica (Legalização)")
     
-    # --- SELETOR DE CONTEXTO (IMPORTANTE: Fica no topo) ---
-    st.write("📍 **Configuração da Visita**")
+    st.write("📍 **Contexto da Vistoria**")
     tipo_estab = st.selectbox(
-        "Qual o tipo de estabelecimento?", 
+        "Tipo de Estabelecimento", 
         options=list(CONTEXT_DATA.keys()),
         index=list(CONTEXT_DATA.keys()).index(st.session_state['tipo_estabelecimento_atual'])
     )
-    # Atualiza sessão se mudar
     if tipo_estab != st.session_state['tipo_estabelecimento_atual']:
         st.session_state['tipo_estabelecimento_atual'] = tipo_estab
-        st.toast(f"Modo {tipo_estab} ativado!", icon="🔄")
-        time.sleep(0.5)
         st.rerun()
 
     st.markdown("---")
 
     qtd_itens = len(st.session_state['sessao_vistoria'])
-    st.progress(min(qtd_itens * 5, 100), text=f"Itens no Relatório: {qtd_itens}")
+    st.progress(min(qtd_itens * 5, 100), text=f"Apontamentos: {qtd_itens}")
 
     c_form, c_lista = st.columns([1, 1.2])
 
     with c_form:
-        st.subheader("1. Coleta Inteligente")
+        st.subheader("1. Coleta de Não Conformidades")
         with st.container(border=True):
-            # CARREGA DADOS DO CONTEXTO SELECIONADO
             contexto_atual = CONTEXT_DATA[st.session_state['tipo_estabelecimento_atual']]
             lista_setores = contexto_atual["setores"]
             mapa_sugestoes = contexto_atual["sugestoes"]
 
-            local = st.selectbox("Local / Setor", lista_setores)
+            local = st.selectbox("Setor / Área", lista_setores)
             
-            # --- SUGESTÕES DINÂMICAS ---
-            # Pega sugestões específicas do setor OU usa as DEFAULT do contexto
+            # --- MULTI-SELECT DE NCs ---
             sugestoes = mapa_sugestoes.get(local, mapa_sugestoes["DEFAULT"])
             
             if sugestoes:
-                st.caption(f"⚡ Problemas comuns em {local} (Clique para preencher):")
-                cols_sug = st.columns(2)
-                for i, sug in enumerate(sugestoes):
-                    if cols_sug[i % 2].button(sug, key=f"sug_{i}", use_container_width=True):
-                        st.session_state['item_temp_nome'] = sug
-                        st.rerun()
+                st.info(f"🔍 Não Conformidades Comuns em **{local}**:")
+                problemas_selecionados = st.multiselect(
+                    label="Selecione as NCs encontradas (Lista Cumulativa)",
+                    options=sugestoes,
+                    default=[],
+                    key=f"multi_{local}"
+                )
+                
+                # Atualiza a variável temporária com a concatenação
+                if problemas_selecionados:
+                    texto_combinado = " + ".join(problemas_selecionados)
+                    if " + " not in st.session_state.get('item_temp_nome', "") or st.session_state.get('item_temp_nome', "") == "":
+                         st.session_state['item_temp_nome'] = texto_combinado
+                    else:
+                        st.session_state['item_temp_nome'] = texto_combinado
             
             val_item = st.session_state.get('item_temp_nome', "")
-            item_nome = st.text_input("Item Avaliado", value=val_item, key="input_item_nome")
+            item_nome = st.text_area("Descrição da NC (Editável)", value=val_item, key="input_item_nome", height=100, help="Descreva a não conformidade técnica ou ajuste os itens selecionados acima.")
+            
             if item_nome != val_item: st.session_state['item_temp_nome'] = item_nome
 
             c1, c2 = st.columns(2)
-            situacao = c1.radio("Situação", ["✅ Conforme", "❌ Irregular", "⚠️ Atenção"], horizontal=False)
-            gravidade = c2.select_slider("Risco", options=["Baixo", "Médio", "Alto", "CRÍTICO"], value="Baixo")
+            situacao = c1.radio("Status Legal", ["❌ Não Conforme", "⚠️ Parcial", "✅ Conforme"], horizontal=False)
+            gravidade = c2.select_slider("Risco Sanitário/Legal", options=["Baixo", "Médio", "Alto", "CRÍTICO"], value="Alto")
             
             st.markdown("---")
-            st.write("📝 **Observação & Voz**")
-            audio_input = st.audio_input("🎙️ Gravar", key="mic_input")
+            st.write("📝 **Evidência Técnica & Voz**")
+            audio_input = st.audio_input("🎙️ Gravar Nota Técnica", key="mic_input")
             
             if audio_input and TEM_RECONHECIMENTO_VOZ:
                 txt = transcrever_audio(audio_input)
                 if txt and txt not in st.session_state['obs_atual']:
                     st.session_state['obs_atual'] += " " + txt
             
-            obs = st.text_area("Texto", value=st.session_state['obs_atual'], height=100)
+            obs = st.text_area("Detalhes Técnicos / Base Legal", value=st.session_state['obs_atual'], height=100, placeholder="Ex: Piso poroso não atende RDC 50...")
             if obs != st.session_state['obs_atual']: st.session_state['obs_atual'] = obs
 
             st.markdown("---")
-            st.write("📸 **Fotos**")
-            foto_input = st.camera_input("Foto")
+            st.write("📸 **Fotos (Evidência)**")
+            foto_input = st.camera_input("Capturar")
             if foto_input:
                 if not st.session_state['fotos_temp'] or foto_input.getvalue() != st.session_state['fotos_temp'][-1]:
                     st.session_state['fotos_temp'].append(foto_input.getvalue())
@@ -339,8 +423,8 @@ elif menu == "Vistoria Mobile":
                     st.session_state['fotos_temp'] = []; st.rerun()
 
             st.markdown("---")
-            if st.button("➕ ADICIONAR AO RELATÓRIO", type="primary", use_container_width=True):
-                if not item_nome: st.error("Nome do item obrigatório.")
+            if st.button("➕ REGISTRAR APONTAMENTO", type="primary", use_container_width=True):
+                if not item_nome: st.error("Descrição obrigatória.")
                 else:
                     audio_blob = audio_input.getvalue() if audio_input else None
                     novo = {
@@ -352,29 +436,29 @@ elif menu == "Vistoria Mobile":
                     st.session_state['fotos_temp'] = []
                     st.session_state['obs_atual'] = ""
                     st.session_state['item_temp_nome'] = "" 
-                    st.toast("Item salvo!", icon="💾")
+                    st.toast("Apontamento registrado!", icon="💾")
                     time.sleep(0.5); st.rerun()
 
     with c_lista:
-        st.subheader("2. Pacote de Evidências")
+        st.subheader("2. Relatório Técnico (ZIP)")
         if not st.session_state['sessao_vistoria']:
-            st.info("Lista vazia.")
+            st.info("Aguardando apontamentos...")
         else:
             for i, reg in enumerate(st.session_state['sessao_vistoria']):
-                with st.expander(f"#{i+1} {reg['Item']} ({reg['Local']})", expanded=False):
-                    st.write(f"**Situação:** {reg['Situação']}")
+                with st.expander(f"#{i+1} {reg['Local']} ({reg['Gravidade']})", expanded=False):
+                    st.write(f"**NC:** {reg['Item']}")
+                    st.write(f"**Status:** {reg['Situação']}")
                     if reg.get('Audio_Bytes'): st.audio(reg['Audio_Bytes'])
-                    st.write(f"**Fotos:** {len(reg['Fotos'])}")
+                    st.write(f"**Evidências:** {len(reg['Fotos'])}")
                     if st.button("Remover", key=f"del_{i}"):
                         st.session_state['sessao_vistoria'].pop(i); st.rerun()
             
             st.markdown("---")
-            # PASSAMOS O TIPO DE ESTABELECIMENTO PARA O PDF
             zip_data = gerar_pacote_zip_completo(st.session_state['sessao_vistoria'], st.session_state['tipo_estabelecimento_atual'])
-            nome_zip = f"Vistoria_{limpar_texto_pdf(st.session_state['tipo_estabelecimento_atual'])}_{datetime.now().strftime('%d-%m-%H%M')}.zip"
+            nome_zip = f"Relatorio_Legalizacao_{limpar_texto_pdf(st.session_state['tipo_estabelecimento_atual'])}_{datetime.now().strftime('%d-%m-%H%M')}.zip"
             
             st.download_button(
-                label="📦 BAIXAR PACOTE COMPLETO (.ZIP)",
+                label="📦 BAIXAR PACOTE TÉCNICO COMPLETO (.ZIP)",
                 data=zip_data,
                 file_name=nome_zip,
                 mime="application/zip",
@@ -382,7 +466,7 @@ elif menu == "Vistoria Mobile":
                 use_container_width=True
             )
             
-            if st.button("Limpar Tudo", type="secondary", use_container_width=True):
+            if st.button("Limpar Vistoria", type="secondary", use_container_width=True):
                 st.session_state['sessao_vistoria'] = []
                 st.rerun()
 
