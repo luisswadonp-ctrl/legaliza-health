@@ -38,14 +38,14 @@ st.set_page_config(
     page_title="LegalizaHealth Pro", 
     page_icon="🏥", 
     layout="wide",
-    initial_sidebar_state="collapsed" # COMEÇA FECHADO PARA DAR ESPAÇO NO CELULAR
+    initial_sidebar_state="collapsed"
 )
 
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_CHECK_ROBO = 60
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
-# --- 2. CÉREBRO DE INTELIGÊNCIA DINÂMICA (NÍVEL SÊNIOR) ---
+# --- 2. CÉREBRO DE INTELIGÊNCIA DINÂMICA ---
 CONTEXT_DATA = {
     "🏥 Hospital / Clínica / Laboratório": {
         "setores": [
@@ -67,11 +67,6 @@ CONTEXT_DATA = {
                 "Piso/Parede com juntas ou rodapé não arredondado",
                 "Mobiliário com superfície porosa (madeira não tratada)",
                 "Lixeira sem acionamento por pedal"
-            ],
-            "Consultório Gineco/Uro": [
-                "Sanitário anexo não acessível ou ausente",
-                "Falta de área para troca de vestimenta",
-                "Foco de luz auxiliar inoperante"
             ],
             "DML (Limpeza)": [
                 "Tanque de lavagem único (necessário setorização)",
@@ -121,59 +116,25 @@ CONTEXT_DATA = {
     "🏭 Indústria / Logística": {
         "setores": ["Linha de Produção", "Estoque/Almoxarifado", "Vestiários", "Refeitório", "Caldeiras/Compressor", "Área Externa"],
         "sugestoes": {
-            "Linha de Produção": [
-                "Máquinas sem proteção de partes móveis (NR-12)",
-                "Área de circulação obstruída/sem demarcação",
-                "Painel elétrico desobstruído ou sem tranca (NR-10)",
-                "Iluminação insuficiente (Luxímetro)"
-            ],
-            "Estoque/Almoxarifado": [
-                "Empilhamento acima da capacidade (risco de queda)",
-                "Extintores obstruídos por mercadoria",
-                "Estrutura de porta-pallets danificada",
-                "Ausência de rota de fuga demarcada no chão"
-            ],
-            "Vestiários": [
-                "Armários insuficientes para nº de funcionários (NR-24)",
-                "Piso escorregadio/sem antiderrapante",
-                "Ventilação inadequada"
-            ],
-            "DEFAULT": [
-                "AVCB vencido ou não condizente com layout",
-                "Ausência de SPDA (Para-raios) laudo",
-                "Descarte de efluentes irregular"
-            ]
+            "Linha de Produção": ["Máquinas sem proteção (NR-12)", "Área de circulação obstruída", "Painel elétrico sem tranca (NR-10)", "Iluminação insuficiente"],
+            "Estoque/Almoxarifado": ["Empilhamento excessivo", "Extintores obstruídos", "Porta-pallets danificada", "Ausência de rota de fuga"],
+            "DEFAULT": ["AVCB vencido", "Ausência de SPDA", "Descarte de efluentes irregular"]
         }
     },
-    "🛒 Varejo de Alimentos (Mercado/Restaurante)": {
+    "🛒 Varejo de Alimentos": {
         "setores": ["Área de Venda", "Cozinha/Manipulação", "Estoque Seco", "Câmara Fria", "Saneantes", "Lixo"],
         "sugestoes": {
-            "Cozinha/Manipulação": [
-                "Fluxo cruzado (alimento cru x cozido)",
-                "Ausência de pia exclusiva para lavagem de mãos",
-                "Ausência de tela milimétrica nas janelas",
-                "Luminárias sem proteção contra estilhaços"
-            ],
-            "Câmara Fria": [
-                "Temperatura acima do permitido",
-                "Gelo acumulado nos evaporadores/piso",
-                "Alimentos armazenados diretamente no chão",
-                "Porta não veda corretamente (borracha)"
-            ],
-            "DEFAULT": [
-                "Licença Sanitária vencida",
-                "Manual de Boas Práticas desatualizado",
-                "Certificado de Limpeza de Caixa d'Água vencido"
-            ]
+            "Cozinha/Manipulação": ["Fluxo cruzado", "Ausência de pia exclusiva mãos", "Ausência de tela milimétrica", "Luminárias sem proteção"],
+            "Câmara Fria": ["Temperatura alta", "Gelo acumulado", "Alimentos no chão", "Porta não veda"],
+            "DEFAULT": ["Licença Sanitária vencida", "Manual de Boas Práticas desatualizado", "Caixa d'Água suja"]
         }
     }
 }
 
 # --- 2.1 BASE DE DOCUMENTOS ---
 DOC_INTELLIGENCE = {
-    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura", "tarefas": ["Renovação", "Taxa"]},
-    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+vigilancia", "tarefas": ["Protocolo VISA", "Manual Boas Práticas"]},
-    "Corpo de Bombeiros": {"dias": 1095, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+avcb+bombeiros", "tarefas": ["Extintores", "Hidrantes"]},
+    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento", "tarefas": ["Renovação", "Taxa"]},
+    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria", "tarefas": ["Protocolo VISA", "Manual Boas Práticas"]},
     "DEFAULT": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Verificar validade"]}
 }
 LISTA_TIPOS_DOCUMENTOS = ["Alvará de Funcionamento", "Licença Sanitária", "Corpo de Bombeiros", "Outros"] 
@@ -244,7 +205,7 @@ def transcrever_audio(audio_file):
         return texto
     except: return ""
 
-# --- GERADOR DE ZIP ---
+# --- GERADOR DE ZIP (CORRIGIDO) ---
 class RelatorioPDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 14)
@@ -261,6 +222,9 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
     pdf = RelatorioPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 12)
+    
+    # Define largura efetiva da página (A4 - margens)
+    epw = pdf.w - 2*pdf.l_margin 
     
     total = len(itens_vistoria)
     criticos = sum(1 for i in itens_vistoria if i['Gravidade'] == 'CRÍTICO')
@@ -285,10 +249,12 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
         obs_safe = limpar_texto_pdf(item['Obs'])
         
         pdf.set_font("Arial", "B", 11)
-        pdf.multi_cell(0, 8, f"#{idx+1} - {local_safe}", 1, 'L', fill=True)
+        # --- CORREÇÃO AQUI: Largura explícita (epw) em vez de 0 ---
+        pdf.multi_cell(epw, 8, f"#{idx+1} - {local_safe}", 1, 'L', fill=True)
         
         pdf.set_font("Arial", "B", 10)
-        pdf.multi_cell(0, 6, f"NC Identificada: {item_safe}")
+        # --- CORREÇÃO AQUI TAMBÉM ---
+        pdf.multi_cell(epw, 6, f"NC Identificada: {item_safe}")
         
         pdf.set_font("Arial", "", 10)
         info_extra = ""
@@ -298,7 +264,8 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
             audios_para_zip.append((nome_audio, item['Audio_Bytes']))
             info_extra = f" [AUDIO ANEXO: {nome_audio}]"
 
-        pdf.multi_cell(0, 6, f"Status: {limpar_texto_pdf(item['Situação'])}\nGravidade: {limpar_texto_pdf(item['Gravidade'])}\nDetalhes: {obs_safe}{info_extra}")
+        # --- CORREÇÃO AQUI TAMBÉM ---
+        pdf.multi_cell(epw, 6, f"Status: {limpar_texto_pdf(item['Situação'])}\nGravidade: {limpar_texto_pdf(item['Gravidade'])}\nTecnica: {obs_safe}{info_extra}")
         pdf.ln(2)
         
         if item['Fotos']:
@@ -332,13 +299,13 @@ if 'sessao_vistoria' not in st.session_state: st.session_state['sessao_vistoria'
 if 'fotos_temp' not in st.session_state: st.session_state['fotos_temp'] = []
 if 'obs_atual' not in st.session_state: st.session_state['obs_atual'] = ""
 if 'tipo_estabelecimento_atual' not in st.session_state: st.session_state['tipo_estabelecimento_atual'] = "🏥 Hospital / Clínica / Laboratório"
-# Controle de seleção das checkboxes para evitar reset
+# Controle de checkboxes
 if 'checks_temp' not in st.session_state: st.session_state['checks_temp'] = {}
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v49.0 - Mobile Sênior")
+    st.caption("v49.1 - Correção PDF")
 
 # --- TELAS ---
 if menu == "Painel Geral":
@@ -363,7 +330,7 @@ elif menu == "Vistoria Mobile":
     )
     if tipo_estab != st.session_state['tipo_estabelecimento_atual']:
         st.session_state['tipo_estabelecimento_atual'] = tipo_estab
-        st.session_state['checks_temp'] = {} # Limpa seleção se mudar contexto
+        st.session_state['checks_temp'] = {} 
         st.rerun()
 
     st.markdown("---")
@@ -371,7 +338,6 @@ elif menu == "Vistoria Mobile":
     qtd_itens = len(st.session_state['sessao_vistoria'])
     st.progress(min(qtd_itens * 5, 100), text=f"Apontamentos na Sessão: {qtd_itens}")
 
-    # NO MOBILE, USAMOS ABAS PARA ORGANIZAR EM VEZ DE COLUNAS APERTADAS
     tab_coleta, tab_revisao = st.tabs(["📸 Coleta de Dados", "📄 Revisar & Baixar"])
 
     with tab_coleta:
@@ -382,7 +348,6 @@ elif menu == "Vistoria Mobile":
 
             local = st.selectbox("1. Setor / Área", lista_setores)
             
-            # --- SELEÇÃO POR CHECKBOX (MELHOR PARA MOBILE) ---
             sugestoes = mapa_sugestoes.get(local, mapa_sugestoes["DEFAULT"])
             
             selecionados_agora = []
@@ -391,21 +356,16 @@ elif menu == "Vistoria Mobile":
                 st.info(f"👇 Toque para selecionar NCs em **{local}**:")
                 with st.expander("🔍 Lista de Problemas Comuns (Toque aqui)", expanded=True):
                     for sug in sugestoes:
-                        # Cria uma chave única para cada checkbox baseada no setor e texto
                         chave_chk = f"{local}_{sug}"
-                        # Se marcado, adiciona à lista
                         if st.checkbox(sug, key=chave_chk):
                             selecionados_agora.append(sug)
             
-            # Monta o texto automaticamente
             texto_automatico = ""
             if selecionados_agora:
                 texto_automatico = " + ".join(selecionados_agora)
             
             st.markdown("---")
             st.write("2. Descrição da Não Conformidade")
-            
-            # Se tiver seleção automática, usa ela. Se o usuário editou manualmente antes, respeita a edição (complexo em stateless, vamos simplificar: o automático sobrescreve ou concatena)
             
             item_nome = st.text_area("Descrição Técnica", value=texto_automatico, height=150, help="O texto aqui será salvo no relatório. Você pode editar.")
             
@@ -446,11 +406,8 @@ elif menu == "Vistoria Mobile":
                         "Audio_Bytes": audio_blob, "Hora": datetime.now().strftime("%H:%M")
                     }
                     st.session_state['sessao_vistoria'].append(novo)
-                    # Limpeza pós-salvamento
                     st.session_state['fotos_temp'] = []
                     st.session_state['obs_atual'] = ""
-                    # Reset checkboxes (gambiarra do streamlit: para resetar, precisamos dar rerun ou limpar session keys)
-                    # Vamos manter simples: o usuario desmarca manual ou segue pro proximo setor
                     st.toast("Salvo com sucesso!", icon="✅")
                     time.sleep(0.5); st.rerun()
 
@@ -460,11 +417,10 @@ elif menu == "Vistoria Mobile":
             st.info("Nenhum apontamento ainda.")
         else:
             for i, reg in enumerate(st.session_state['sessao_vistoria']):
-                # Card Visual para Mobile
                 with st.container(border=True):
                     c_a, c_b = st.columns([4, 1])
                     c_a.markdown(f"**{i+1}. {reg['Local']}**")
-                    c_a.caption(f"{reg['Item'][:100]}...") # Texto curto
+                    c_a.caption(f"{reg['Item'][:100]}...")
                     if c_b.button("🗑️", key=f"del_{i}"):
                         st.session_state['sessao_vistoria'].pop(i); st.rerun()
             
