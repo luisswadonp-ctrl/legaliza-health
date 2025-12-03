@@ -33,13 +33,89 @@ try:
 except ImportError:
     TEM_PLOTLY = False
 
-# --- 1. CONFIGURAÇÃO GERAL (MOBILE FIRST) ---
+# --- 1. CONFIGURAÇÃO GERAL (MOBILE FIRST & DESIGN) ---
 st.set_page_config(
-    page_title="LegalizaHealth Pro", 
+    page_title="Legaliza Health", 
     page_icon="🏥", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# --- CSS PREMIUM (DESIGN SYSTEM) ---
+st.markdown("""
+<style>
+    /* Importando Fonte Moderna */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Fundo Geral mais limpo */
+    .stApp { 
+        background-color: #0e1117; 
+        color: #f0f2f6; 
+    }
+    
+    /* Cards de KPI com efeito Glassmorphism */
+    div[data-testid="metric-container"] {
+        background-color: rgba(31, 41, 55, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-left: 5px solid #00c853; /* Verde marca */
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur( 4px );
+        -webkit-backdrop-filter: blur( 4px );
+        transition: transform 0.2s;
+    }
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-5px);
+    }
+    
+    /* Botões Primários (Gradiente Moderno) */
+    div.stButton > button:first-child {
+        border-radius: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        height: 55px;
+        width: 100%;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        border: none;
+        color: white;
+        box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
+        transition: all 0.3s ease;
+        margin-bottom: 10px;
+    }
+    div.stButton > button:first-child:hover {
+        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6);
+        transform: scale(1.02);
+    }
+
+    /* Botões Secundários (Outline) */
+    div.stButton > button[kind="secondary"] {
+        background: transparent;
+        border: 2px solid #4b5563;
+        color: #e5e7eb;
+    }
+
+    /* Tabelas mais limpas */
+    [data-testid="stDataFrame"] { 
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid #374151;
+    }
+
+    /* Inputs e Selectbox */
+    .stTextInput > div > div > input, .stSelectbox > div > div > div {
+        border-radius: 8px;
+        border-color: #374151;
+        background-color: #1f2937;
+        color: white;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 TOPICO_NOTIFICACAO = "legaliza_vida_alerta_hospital"
 INTERVALO_CHECK_ROBO = 60
@@ -133,12 +209,10 @@ CONTEXT_DATA = {
 
 # --- 2.1 BASE DE DOCUMENTOS ---
 DOC_INTELLIGENCE = {
-    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento+prefeitura", "tarefas": ["Renovação", "Taxa"]},
-    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria+vigilancia", "tarefas": ["Protocolo VISA", "Manual Boas Práticas"]},
-    "Corpo de Bombeiros": {"dias": 1095, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+avcb+bombeiros", "tarefas": ["Extintores", "Hidrantes"]},
+    "Alvará de Funcionamento": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+alvara+funcionamento", "tarefas": ["Renovação", "Taxa"]},
+    "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria", "tarefas": ["Protocolo VISA", "Manual Boas Práticas"]},
     "DEFAULT": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Verificar validade"]}
 }
-
 # ADICIONANDO A BASE DE CONHECIMENTO COMPLETA (Versão Sênior)
 DOC_INTELLIGENCE.update({
     "Licença de Publicidade": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Medir fachada", "Pagar taxa TFA/Cadan", "Verificar padrão visual"]},
@@ -184,7 +258,6 @@ DOC_INTELLIGENCE.update({
     "Licença Sanitária Serviço (Vacinas)": {"dias": 365, "risco": "ALTO", "link": "", "tarefas": ["Rede de frio", "Gerador/Nobreak", "Registro doses"]},
     "Licença Sanitária Serviço (Equipamento)": {"dias": 365, "risco": "MÉDIO", "link": "", "tarefas": ["Plano Manutenção", "Calibração", "Teste Segurança Elétrica", "Etiqueta Validade"]},
 })
-# Loop para equipamentos
 for i in range(1, 23):
     DOC_INTELLIGENCE[f"Licença Sanitária Serviço (Equipamento {i})"] = DOC_INTELLIGENCE["Licença Sanitária Serviço (Equipamento)"]
 
@@ -381,6 +454,13 @@ def salvar_historico_editado(df_editado, data_selecionada):
         st.error(f"Erro ao salvar histórico: {e}")
         return False
 
+def carregar_historico_vistorias():
+    try:
+        sh = conectar_gsheets()
+        ws = sh.worksheet("Vistorias")
+        return pd.DataFrame(ws.get_all_records())
+    except: return pd.DataFrame()
+
 def enviar_notificacao_push(titulo, mensagem, prioridade="default"):
     try:
         requests.post(f"https://ntfy.sh/{TOPICO_NOTIFICACAO}",
@@ -426,7 +506,6 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     pdf.set_font("Arial", "", 11)
     pdf.multi_cell(epw, 6, f"Cliente: {limpar_texto_pdf(nome_cliente)}\nEndereco: {limpar_texto_pdf(endereco_cliente)}\nTipo: {limpar_texto_pdf(tipo_estabelecimento)}", 1)
     pdf.ln(5)
-
     total = len(itens_vistoria)
     criticos = sum(1 for i in itens_vistoria if i['Gravidade'] == 'CRÍTICO')
     pdf.set_font("Arial", "B", 12)
@@ -435,7 +514,6 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     pdf.set_font("Arial", "", 11)
     pdf.cell(epw, 8, f"Total de Apontamentos: {total} | Pontos Criticos: {criticos}", 1, 1)
     pdf.ln(5)
-
     audios_para_zip = []
     for idx, item in enumerate(itens_vistoria):
         if pdf.get_y() > 250: pdf.add_page()
@@ -522,8 +600,8 @@ if 'cliente_endereco' not in st.session_state: st.session_state['cliente_enderec
 
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
-    menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v57.0 - Layout Ajustado")
+    menu = option_menu(menu_title="Legaliza Health", options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=0)
+    st.caption("v62.0 - Design Premium")
 
 # --- ROBÔ ---
 try:
@@ -559,20 +637,26 @@ except Exception as e: pass
 
 # --- TELAS ---
 if menu == "Painel Geral":
-    st.title("Painel de Controle Estratégico")
+    st.title("Painel Estratégico")
     df_p, _ = get_dados()
     if df_p.empty:
         st.warning("Ainda não há documentos cadastrados. Adicione na aba 'Gestão de Docs'.")
         st.stop()
-    n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
-    n_alto = len(df_p[df_p['Status'] == "ALTO"])
-    n_norm = len(df_p[df_p['Status'] == "NORMAL"])
+    
+    # KPIS SIMPLIFICADOS (DESIGN CLEAN)
+    n_crit = len(df_p[df_p['Status'] == 'CRÍTICO'])
+    n_alto = len(df_p[df_p['Status'] == 'ALTO'])
+    n_norm = len(df_p[df_p['Status'] == 'NORMAL'])
+    
     c1, c2, c3, c4 = st.columns(4)
     if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
     if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
     if c3.button(f"🟢 NORMAL: {n_norm}", use_container_width=True): st.session_state['filtro_dash'] = "NORMAL"
     if c4.button(f"📋 TOTAL: {len(df_p)}", use_container_width=True): st.session_state['filtro_dash'] = "TODOS"
+    
     st.markdown("---")
+    
+    # LISTA RÁPIDA
     busca_painel = st.text_input("🔎 Buscar Unidade/Documento", placeholder="Ex: gravatai, crm, alvara...")
     f_atual = st.session_state['filtro_dash']
     st.subheader(f"Lista de Processos: {f_atual}")
@@ -584,7 +668,10 @@ if menu == "Painel Geral":
     if not df_show.empty:
         st.dataframe(df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], use_container_width=True, hide_index=True, column_config={"Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"), "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"), "Status": st.column_config.TextColumn("Risco", width="small")})
     else: st.info("Nenhum item encontrado.")
+    
     st.markdown("---")
+    
+    # PANORAMA SIMPLIFICADO
     st.subheader("Panorama")
     if not df_p.empty and TEM_PLOTLY:
         status_counts = df_p['Status'].value_counts()
@@ -891,28 +978,56 @@ elif menu == "Vistoria Mobile":
                 st.session_state['sessao_vistoria'] = []; st.rerun()
 
 elif menu == "Relatórios":
-    st.title("Histórico de Relatórios")
-    tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
-    with tab1:
-        if st.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
-        if len(st.session_state['vistorias']) > 0:
-            pdf = gerar_pdf(st.session_state['vistorias'])
-            st.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
-    with tab2:
-        try:
-            sh = conectar_gsheets()
-            ws = sh.worksheet("Vistorias")
-            df_h = pd.DataFrame(ws.get_all_records())
-            if not df_h.empty:
-                sel = st.selectbox("Data:", df_h['Data'].unique())
-                df_f = df_h[df_h['Data'] == sel]
-                st.info("Edite ou exclua linhas abaixo e clique em Salvar Correções.")
-                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
-                c_save, c_down = st.columns(2)
-                if c_save.button("💾 Salvar Correções no Histórico"):
-                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
-                if c_down.button(f"📥 Baixar PDF"):
-                    pdf = gerar_pdf(df_f.to_dict('records'))
-                    st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
-        except: st.error("Sem histórico.")
+    st.title("📊 Dashboard & Relatórios")
+    tab_dash, tab_audit_db = st.tabs(["🚀 BI Inteligente", "📂 Banco de Dados"])
+    with tab_dash:
+        df_docs, _ = get_dados()
+        df_audits = carregar_historico_vistorias()
+        df_mobile_temp = pd.DataFrame(st.session_state['sessao_vistoria'])
+        if not df_mobile_temp.empty:
+            df_mobile_temp = df_mobile_temp.rename(columns={'Local': 'Setor', 'Gravidade': 'Status'})
+        
+        k1, k2, k3, k4 = st.columns(4)
+        n_crit = len(df_docs[df_docs['Status'] == 'CRÍTICO']) if not df_docs.empty else 0
+        k1.metric("Docs Críticos", n_crit, delta="Atenção!" if n_crit > 0 else "Ok", delta_color="inverse")
+        media_prog = int(df_docs['Progresso'].mean()) if not df_docs.empty else 0
+        k2.metric("Conformidade Docs", f"{media_prog}%")
+        total_vistorias = (len(df_audits) if not df_audits.empty else 0) + len(df_mobile_temp)
+        k3.metric("Apontamentos (Total)", total_vistorias)
+        vencidos = 0
+        if not df_docs.empty:
+            hoje = date.today()
+            df_docs['Vencimento_dt'] = pd.to_datetime(df_docs['Vencimento'], dayfirst=True, errors='coerce').dt.date
+            vencidos = len(df_docs[df_docs['Vencimento_dt'] < hoje])
+        k4.metric("Docs Vencidos", vencidos, delta="-Ação Imediata" if vencidos > 0 else "Ok", delta_color="inverse")
+        st.markdown("---")
+        if TEM_PLOTLY:
+            c_g1, c_g2 = st.columns(2)
+            # GRÁFICO 1: TIMELINE DE VENCIMENTOS
+            if not df_docs.empty:
+                df_timeline = df_docs[df_docs['Vencimento_dt'].notna()].copy()
+                df_timeline['Mes'] = df_timeline['Vencimento_dt'].dt.to_period('M').astype(str)
+                vencimentos = df_timeline.groupby('Mes').size().reset_index(name='Docs')
+                fig_time = px.bar(vencimentos.sort_values('Mes'), x='Mes', y='Docs', title="📅 Cronograma de Vencimentos", color='Docs', color_continuous_scale='Reds')
+                c_g1.plotly_chart(fig_time, use_container_width=True)
+            
+            # GRÁFICO 2: MATRIZ DE URGÊNCIA
+            if not df_docs.empty:
+                hoje = pd.to_datetime('today')
+                df_docs['Dias_Restantes'] = (df_docs['Vencimento_dt'] - hoje).dt.days
+                df_pend = df_docs[df_docs['Progresso'] < 100]
+                if not df_pend.empty:
+                    fig_scat = px.scatter(df_pend, x='Dias_Restantes', y='Progresso', color='Status', title="🚨 Matriz de Urgência", color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
+                    fig_scat.add_vline(x=0, line_dash="dash", line_color="red")
+                    c_g2.plotly_chart(fig_scat, use_container_width=True)
 
+    with tab_audit_db:
+        st.info("Edição de dados brutos salvos na nuvem.")
+        if not df_audits.empty:
+            sel = st.selectbox("Filtrar por Data:", ["Todas"] + sorted(list(df_audits['Data'].unique()), reverse=True))
+            df_f = df_audits if sel == "Todas" else df_audits[df_audits['Data'] == sel]
+            st.dataframe(df_f, use_container_width=True)
+            with st.expander("✏️ Editar Registros (Avançado)"):
+                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True)
+                if st.button("💾 Salvar Edição na Nuvem"):
+                    salvar_historico_editado(df_edited, sel if sel != "Todas" else df_audits['Data'].iloc[0])
