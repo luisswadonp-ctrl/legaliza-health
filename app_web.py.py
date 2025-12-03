@@ -41,53 +41,29 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS PERSONALIZADO (MOBILE PREMIUM) ---
+# --- CSS PERSONALIZADO ---
 st.markdown("""
 <style>
-    /* Fundo e Texto Geral */
     .stApp { background-color: #0e1117; color: #e0e0e0; }
-    
-    /* Cards de KPI Estilizados */
     div[data-testid="metric-container"] {
         background-color: #1f2937;
-        border-left: 5px solid #00c853; /* Verde destaque */
+        border-left: 5px solid #00c853;
         padding: 15px;
         border-radius: 10px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         margin-bottom: 10px;
     }
-    
-    /* Botões Grandes para Dedo (Touch) */
     .stButton>button {
         border-radius: 12px;
         font-weight: 600;
         text-transform: uppercase;
-        height: 50px; /* Botão mais alto para facilitar toque */
+        height: 50px;
         width: 100%;
         background-image: linear-gradient(to right, #2563eb, #1d4ed8);
         border: none;
         color: white;
         margin-bottom: 10px;
     }
-    
-    /* Abas (Tabs) Maiores */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: #1f2937;
-        border-radius: 8px 8px 0 0;
-        padding: 10px 20px;
-        font-size: 14px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #2563eb !important;
-        color: white !important;
-    }
-
-    /* Tabelas mais limpas */
     [data-testid="stDataFrame"] { width: 100%; }
 </style>
 """, unsafe_allow_html=True)
@@ -99,38 +75,20 @@ ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 # --- 2. CÉREBRO DE INTELIGÊNCIA DINÂMICA ---
 CONTEXT_DATA = {
     "🏥 Hospital / Clínica / Laboratório": {
-        "setores": [
-            "Recepção/Acessibilidade", "Consultório Indiferenciado", "Consultório Gineco/Uro", 
-            "Sala de Procedimentos", "DML (Limpeza)", "Expurgo (Sujo)", "Esterilização (Limpo)", 
-            "Abrigo de Resíduos", "Cozinha/Copa", "Farmácia/CAF", "Raio-X/Imagem", "UTI", "Centro Cirúrgico"
-        ],
+        "setores": ["Recepção/Acessibilidade", "Consultório Indiferenciado", "Consultório Gineco/Uro", "Sala de Procedimentos", "DML (Limpeza)", "Expurgo (Sujo)", "Esterilização (Limpo)", "Abrigo de Resíduos", "Cozinha/Copa", "Farmácia/CAF", "Raio-X/Imagem", "UTI", "Centro Cirúrgico"],
         "sugestoes": {
-            "Recepção/Acessibilidade": ["Balcão sem rebaixo PNE", "Sanitário PNE sem barras", "Área de giro obstruída", "Desnível sem rampa", "Bebedouro alto"],
-            "Consultório Indiferenciado": ["Sem lavatório mãos", "Torneira manual", "Piso com juntas", "Mobiliário poroso", "Lixeira sem pedal"],
-            "DML (Limpeza)": ["Tanque único", "Sem ralo sifonado", "Saneantes no chão", "Ventilação ausente"],
-            "Expurgo (Sujo)": ["Fluxo cruzado", "Sem pia profunda", "Pistola ar/água ruim", "Bancada porosa"],
-            "Esterilização (Limpo)": ["Sem teste biológico", "Barreira sujo/limpo falha", "Temp. alta", "Estéreis mal guardados"],
-            "Abrigo de Resíduos": ["Sem ponto água/ralo", "Não telado", "Identificação errada", "Sem ventilação"],
-            "Farmácia/CAF": ["Termohigrômetro ruim", "Armário controlados aberto", "Pallets madeira", "Medicamento parede/teto"],
-            "Raio-X/Imagem": ["Luz vermelha ruim", "Visor falho", "Porta sem chumbo", "Sem sinalização radiação"],
-            "DEFAULT": ["Projeto diverge do local", "Extintor vencido", "Sem rota fuga", "Luz emergência ruim", "Dedetização vencida"]
+            "UTI": ["Grade do leito baixada", "Sinalização de higienização faltante", "Equipamento sem calibração", "Lixo infectante aberto"],
+            "Farmácia": ["Medicamento vencido", "Temperatura alta", "Controle psicotrópicos falho", "Umidade excessiva"],
+            "DEFAULT": ["Extintor vencido", "Sinalização de rota de fuga ausente", "Iluminação de emergência inoperante"]
         }
     },
     "🏭 Indústria / Logística": {
         "setores": ["Linha de Produção", "Estoque", "Vestiários", "Refeitório", "Caldeiras", "Externo"],
-        "sugestoes": {
-            "Linha de Produção": ["Máquinas sem proteção (NR-12)", "Circulação obstruída", "Painel sem tranca", "Luz fraca"],
-            "Estoque": ["Empilhamento risco", "Extintor obstruído", "Porta-pallet ruim", "Sem rota fuga"],
-            "DEFAULT": ["AVCB vencido", "Sem SPDA", "Efluentes irregulares"]
-        }
+        "sugestoes": {"DEFAULT": ["AVCB vencido", "Ausência de SPDA", "Descarte irregular"]}
     },
     "🛒 Varejo de Alimentos": {
         "setores": ["Venda", "Cozinha", "Estoque", "Câmara Fria", "Lixo"],
-        "sugestoes": {
-            "Cozinha": ["Fluxo cruzado", "Sem pia mãos", "Sem tela janela", "Luz sem proteção"],
-            "Câmara Fria": ["Temp alta", "Gelo acumulado", "Chão sujo", "Porta aberta"],
-            "DEFAULT": ["Licença vencida", "Boas Práticas ausente", "Caixa d'água suja"]
-        }
+        "sugestoes": {"DEFAULT": ["Licença vencida", "Boas Práticas ausente", "Caixa d'água suja"]}
     }
 }
 
@@ -140,7 +98,6 @@ DOC_INTELLIGENCE = {
     "Licença Sanitária": {"dias": 365, "risco": "CRÍTICO", "link": "https://www.google.com/search?q=consulta+licenca+sanitaria", "tarefas": ["Protocolo VISA", "Manual Boas Práticas"]},
     "DEFAULT": {"dias": 365, "risco": "NORMAL", "link": "", "tarefas": ["Verificar validade"]}
 }
-# (Simplifiquei a lista no código visual para não estourar, mas a lógica completa deve ser mantida)
 LISTA_TIPOS_DOCUMENTOS = sorted(["Alvará de Funcionamento", "Licença Sanitária", "Corpo de Bombeiros", "CNES", "CRM", "COREN", "CRF", "Licença Ambiental", "Alvará de Obra", "Habite-se", "Outros"])
 
 # --- AUTO-REFRESH ---
@@ -272,7 +229,7 @@ def salvar_alteracoes_completo(df_prazos, df_checklist):
         ws_check.update([df_c.columns.values.tolist()] + df_c.values.tolist())
         st.cache_data.clear()
         st.session_state['dados_cache'] = (df_prazos, df_checklist)
-        st.toast("✅ Dados Sincronizados com a Nuvem!", icon="☁️")
+        st.toast("✅ Salvo!", icon="☁️")
         return True
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
@@ -374,6 +331,7 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento, nome_cliente
     pdf.add_page()
     pdf.set_font("Arial", "B", 12)
     epw = pdf.w - 2*pdf.l_margin 
+    
     pdf.set_fill_color(220, 220, 220)
     pdf.cell(epw, 10, "DADOS DO CLIENTE / UNIDADE", 1, 1, 'L', fill=True)
     pdf.set_font("Arial", "", 11)
@@ -444,7 +402,10 @@ def gerar_pdf(vistorias):
         pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 10, f"Item #{i+1}: {limpar_txt(item.get('Item', ''))}", 0, 1)
         pdf.set_font("Arial", size=10)
-        pdf.multi_cell(0, 6, f"Local: {limpar_txt(item.get('Setor',''))}\nObs: {limpar_txt(item.get('Obs',''))}")
+        # Correção de limpeza para o PDF simples antigo
+        local_limpo = limpar_texto_pdf(item.get('Setor',''))
+        obs_limpo = limpar_texto_pdf(item.get('Obs',''))
+        pdf.multi_cell(0, 6, f"Local: {local_limpo}\nObs: {obs_limpo}")
         img = None
         if 'Foto_Binaria' in item and item['Foto_Binaria']: img = item['Foto_Binaria']
         elif 'Foto_Link' in item and str(item['Foto_Link']).startswith('http'): img = baixar_imagem_url(item['Foto_Link'])
@@ -474,7 +435,7 @@ if 'cliente_endereco' not in st.session_state: st.session_state['cliente_enderec
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v61.0 - Dashboard Premium Mobile")
+    st.caption("v61.0 - BI & Analytics")
 
 # --- ROBÔ ---
 try:
@@ -510,68 +471,39 @@ except Exception as e: pass
 
 # --- TELAS ---
 if menu == "Painel Geral":
-    st.title("Painel Estratégico")
+    st.title("Painel Geral")
     df_p, _ = get_dados()
-    
     if df_p.empty:
-        st.warning("Sem dados.")
+        st.warning("Ainda não há documentos cadastrados. Adicione na aba 'Gestão de Docs'.")
         st.stop()
-
-    # --- KPIS EM CARDS ---
-    k1, k2, k3, k4 = st.columns(4)
-    n_crit = len(df_p[df_p['Status'] == 'CRÍTICO'])
-    k1.metric("🔴 Docs Críticos", n_crit)
     
-    hoje = pd.to_datetime('today')
-    df_p['Vencimento_dt'] = pd.to_datetime(df_p['Vencimento'], dayfirst=True, errors='coerce')
-    n_vencidos = len(df_p[df_p['Vencimento_dt'] < hoje])
-    k2.metric("⚠️ Vencidos", n_vencidos)
-    
-    media_prog = int(df_p['Progresso'].mean())
-    k3.metric("📈 Conformidade", f"{media_prog}%")
-    
-    k4.metric("📋 Total Docs", len(df_p))
-    
+    # REVERTENDO AO MODELO SIMPLES (KPI + PIE + ALERTA)
+    n_crit = len(df_p[df_p['Status'] == "CRÍTICO"])
+    n_alto = len(df_p[df_p['Status'] == "ALTO"])
+    n_norm = len(df_p[df_p['Status'] == "NORMAL"])
+    c1, c2, c3, c4 = st.columns(4)
+    if c1.button(f"🔴 CRÍTICO: {n_crit}", use_container_width=True): st.session_state['filtro_dash'] = "CRÍTICO"
+    if c2.button(f"🟠 ALTO: {n_alto}", use_container_width=True): st.session_state['filtro_dash'] = "ALTO"
+    if c3.button(f"🟢 NORMAL: {n_norm}", use_container_width=True): st.session_state['filtro_dash'] = "NORMAL"
+    if c4.button(f"📋 TOTAL: {len(df_p)}", use_container_width=True): st.session_state['filtro_dash'] = "TODOS"
     st.markdown("---")
-    
-    # --- ABAS DE VISUALIZAÇÃO ---
-    tab_overview, tab_timeline, tab_unit = st.tabs(["📊 Resumo", "📅 Cronograma", "🏥 Unidades"])
-    
-    with tab_overview:
-        c_g1, c_g2 = st.columns(2)
-        
-        # Gráfico de Status (Donut Simples)
-        if TEM_PLOTLY:
-            status_counts = df_p['Status'].value_counts()
-            fig_donut = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6, 
-                               color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
-            fig_donut.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=250)
-            c_g1.plotly_chart(fig_donut, use_container_width=True)
-        
-        # Lista de Prioridades
-        c_g2.markdown("##### 🚨 Prioridades Imediatas")
-        # Filtra críticos ou vencidos não concluídos
-        df_prio = df_p[(df_p['Status'] == 'CRÍTICO') | (df_p['Vencimento_dt'] < hoje)].sort_values('Vencimento_dt').head(5)
-        if not df_prio.empty:
-            for idx, row in df_prio.iterrows():
-                c_g2.error(f"{row['Unidade']} - {row['Documento']}")
-        else:
-            c_g2.success("Nenhuma pendência crítica!")
-
-    with tab_timeline:
-        if TEM_PLOTLY:
-            df_timeline = df_p[df_p['Vencimento_dt'].notna()].copy()
-            df_timeline['Mes'] = df_timeline['Vencimento_dt'].dt.to_period('M').astype(str)
-            vencimentos = df_timeline.groupby('Mes').size().reset_index(name='Qtd')
-            fig_bar = px.bar(vencimentos, x='Mes', y='Qtd', color='Qtd', color_continuous_scale='Reds')
-            st.plotly_chart(fig_bar, use_container_width=True)
-            
-    with tab_unit:
-        # Barra de progresso por unidade
-        unidades = df_p.groupby('Unidade')['Progresso'].mean().sort_values()
-        for un, prog in unidades.items():
-            st.write(f"**{un}**")
-            st.progress(int(prog), text=f"{int(prog)}%")
+    f_atual = st.session_state['filtro_dash']
+    st.subheader(f"Lista de Processos: {f_atual}")
+    df_show = df_p.copy()
+    if f_atual != "TODOS": df_show = df_show[df_show['Status'] == f_atual]
+    if not df_show.empty:
+        st.dataframe(df_show[['Unidade', 'Setor', 'Documento', 'Vencimento', 'Progresso', 'Status']], use_container_width=True, hide_index=True, column_config={"Vencimento": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY"), "Progresso": st.column_config.ProgressColumn("Progressão", format="%d%%"), "Status": st.column_config.TextColumn("Risco", width="small")})
+    else: st.info("Nenhum item neste status.")
+    st.markdown("---")
+    st.subheader("Panorama")
+    if not df_p.empty and TEM_PLOTLY:
+        status_counts = df_p['Status'].value_counts()
+        fig = px.pie(values=status_counts.values, names=status_counts.index, hole=0.6, color=status_counts.index, color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
+        fig.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)', legend=dict(orientation="h", y=-0.2))
+        st.plotly_chart(fig, use_container_width=True)
+        media = int(df_p['Progresso'].mean()) if not df_p.empty else 0
+        st.metric("Progressão Geral", f"{media}%")
+        st.progress(media)
 
 elif menu == "Gestão de Docs":
     st.title("Gestão de Documentos")
@@ -869,27 +801,57 @@ elif menu == "Vistoria Mobile":
                 st.session_state['sessao_vistoria'] = []; st.rerun()
 
 elif menu == "Relatórios":
-    st.title("Histórico de Relatórios")
-    tab1, tab2 = st.tabs(["Sessão Atual", "Histórico"])
-    with tab1:
-        if st.button("☁️ Salvar Nuvem"): salvar_vistoria_db(st.session_state['vistorias']); st.toast("Salvo!")
-        if len(st.session_state['vistorias']) > 0:
-            pdf = gerar_pdf(st.session_state['vistorias'])
-            st.download_button("📥 Baixar PDF", data=pdf, file_name="Relatorio_Hoje.pdf", mime="application/pdf", type="primary")
-    with tab2:
-        try:
-            sh = conectar_gsheets()
-            ws = sh.worksheet("Vistorias")
-            df_h = pd.DataFrame(ws.get_all_records())
-            if not df_h.empty:
-                sel = st.selectbox("Data:", df_h['Data'].unique())
-                df_f = df_h[df_h['Data'] == sel]
-                st.info("Edite ou exclua linhas abaixo e clique em Salvar Correções.")
-                df_edited = st.data_editor(df_f, num_rows="dynamic", use_container_width=True, hide_index=True)
-                c_save, c_down = st.columns(2)
-                if c_save.button("💾 Salvar Correções no Histórico"):
-                    if salvar_historico_editado(df_edited, sel): time.sleep(1); st.rerun()
-                if c_down.button(f"📥 Baixar PDF"):
-                    pdf = gerar_pdf(df_f.to_dict('records'))
-                    st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
-        except: st.error("Sem histórico.")
+    st.title("📊 Dashboard & Relatórios")
+    tab_dash, tab_audit_db = st.tabs(["🚀 BI Inteligente", "📂 Banco de Dados"])
+    
+    # --- ABA 1: BI (GRÁFICOS NOVOS NO RELATÓRIO) ---
+    with tab_dash:
+        df_docs, _ = get_dados()
+        df_audits = carregar_historico_vistorias()
+        
+        # Dados Híbridos (Nuvem + Mobile atual)
+        df_mobile_temp = pd.DataFrame(st.session_state['sessao_vistoria'])
+        if not df_mobile_temp.empty:
+            df_mobile_temp = df_mobile_temp.rename(columns={'Local': 'Setor', 'Gravidade': 'Status'})
+        
+        # TIMELINE DE VENCIMENTOS
+        st.subheader("📅 Cronograma de Vencimentos")
+        if not df_docs.empty and TEM_PLOTLY:
+            df_docs['Vencimento_dt'] = pd.to_datetime(df_docs['Vencimento'], dayfirst=True, errors='coerce')
+            df_timeline = df_docs[df_docs['Vencimento_dt'].notna()].copy()
+            df_timeline['Mes'] = df_timeline['Vencimento_dt'].dt.to_period('M').astype(str)
+            venc_mes = df_timeline.groupby('Mes').size().reset_index(name='Docs')
+            fig_time = px.bar(venc_mes.sort_values('Mes'), x='Mes', y='Docs', title="Vencimentos Futuros", color='Docs', color_continuous_scale='Reds')
+            st.plotly_chart(fig_time, use_container_width=True)
+        
+        col_a, col_b = st.columns(2)
+        # RISCO POR UNIDADE
+        with col_a:
+            st.subheader("🏥 Risco por Unidade")
+            if not df_docs.empty and TEM_PLOTLY:
+                risco_unidade = df_docs.groupby(['Unidade', 'Status']).size().reset_index(name='Qtd')
+                fig_risco = px.bar(risco_unidade, x='Unidade', y='Qtd', color='Status', title="Distribuição de Risco", color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
+                st.plotly_chart(fig_risco, use_container_width=True)
+        
+        # MATRIZ DE URGÊNCIA
+        with col_b:
+            st.subheader("🚨 Matriz de Urgência")
+            if not df_docs.empty and TEM_PLOTLY:
+                hoje = pd.to_datetime('today')
+                df_docs['Dias_Restantes'] = (df_docs['Vencimento_dt'] - hoje).dt.days
+                df_pend = df_docs[df_docs['Progresso'] < 100]
+                if not df_pend.empty:
+                    fig_scat = px.scatter(df_pend, x='Dias_Restantes', y='Progresso', color='Status', hover_data=['Documento'], title="Prazo x Progresso", color_discrete_map={"CRÍTICO": "#ff4b4b", "ALTO": "#ffa726", "NORMAL": "#00c853"})
+                    fig_scat.add_vline(x=0, line_dash="dash", line_color="red")
+                    st.plotly_chart(fig_scat, use_container_width=True)
+
+    # --- ABA 2: BANCO DE DADOS ---
+    with tab_audit_db:
+        st.info("Histórico salvo na nuvem.")
+        if not df_audits.empty:
+            sel = st.selectbox("Filtrar Data:", ["Todas"] + sorted(list(df_audits['Data'].unique()), reverse=True))
+            df_f = df_audits if sel == "Todas" else df_audits[df_audits['Data'] == sel]
+            st.dataframe(df_f, use_container_width=True)
+            if st.button("📥 Baixar PDF Histórico"):
+                pdf = gerar_pdf(df_f.to_dict('records'))
+                st.download_button("Download", data=pdf, file_name=f"Relatorio_{sel}.pdf", mime="application/pdf")
