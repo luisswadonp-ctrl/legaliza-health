@@ -41,7 +41,6 @@ INTERVALO_CHECK_ROBO = 60
 ID_PASTA_DRIVE = "1tGVSqvuy6D_FFz6nES90zYRKd0Tmd2wQ"
 
 # --- 2. CÉREBRO DE INTELIGÊNCIA DINÂMICA (NÍVEL SÊNIOR) ---
-# Focado em RDC 50, NBR 9050, Portarias e Normas Regulamentadoras
 CONTEXT_DATA = {
     "🏥 Hospital / Clínica / Laboratório": {
         "setores": [
@@ -203,7 +202,7 @@ def normalizar_texto(texto):
 def limpar_texto_pdf(texto):
     if texto is None: return ""
     texto = str(texto)
-    texto = texto.replace("✅", "[OK]").replace("❌", "[NC]").replace("⚠️", "[!]") # NC = Não Conforme
+    texto = texto.replace("✅", "[OK]").replace("❌", "[NC]").replace("⚠️", "[!]")
     return texto.encode('latin-1', 'replace').decode('latin-1')
 
 def aplicar_inteligencia_doc(tipo_doc, data_base=None):
@@ -281,7 +280,6 @@ def gerar_pacote_zip_completo(itens_vistoria, tipo_estabelecimento):
         obs_safe = limpar_texto_pdf(item['Obs'])
         
         pdf.set_font("Arial", "B", 11)
-        # Título multi-linha para caber múltiplos problemas
         pdf.multi_cell(0, 8, f"#{idx+1} - {local_safe} | {item_safe}", 1, 'L', fill=True)
         
         pdf.set_font("Arial", "", 10)
@@ -330,7 +328,7 @@ if 'tipo_estabelecimento_atual' not in st.session_state: st.session_state['tipo_
 with st.sidebar:
     if img_loading: st.markdown(f"""<div style="text-align: center;"><img src="data:image/gif;base64,{img_loading}" width="100%" style="border-radius:10px;"></div>""", unsafe_allow_html=True)
     menu = option_menu(menu_title=None, options=["Painel Geral", "Gestão de Docs", "Vistoria Mobile", "Relatórios"], icons=["speedometer2", "folder-check", "camera-fill", "file-pdf"], default_index=2)
-    st.caption("v48.0 - Analista Legalização SR")
+    st.caption("v48.1 - Correção Estado Vistoria")
 
 # --- TELAS ---
 if menu == "Painel Geral":
@@ -344,6 +342,12 @@ elif menu == "Vistoria Mobile":
     st.title("📋 Vistoria Técnica (Legalização)")
     
     st.write("📍 **Contexto da Vistoria**")
+    
+    # --- CORREÇÃO DE SEGURANÇA (FIX) ---
+    # Verifica se o valor atual no session_state é válido para a lista nova
+    if st.session_state['tipo_estabelecimento_atual'] not in CONTEXT_DATA.keys():
+        st.session_state['tipo_estabelecimento_atual'] = list(CONTEXT_DATA.keys())[0]
+        
     tipo_estab = st.selectbox(
         "Tipo de Estabelecimento", 
         options=list(CONTEXT_DATA.keys()),
@@ -381,16 +385,16 @@ elif menu == "Vistoria Mobile":
                     key=f"multi_{local}"
                 )
                 
-                # Atualiza a variável temporária com a concatenação
                 if problemas_selecionados:
                     texto_combinado = " + ".join(problemas_selecionados)
+                    # Só atualiza se for diferente para permitir edição manual
                     if " + " not in st.session_state.get('item_temp_nome', "") or st.session_state.get('item_temp_nome', "") == "":
                          st.session_state['item_temp_nome'] = texto_combinado
-                    else:
-                        st.session_state['item_temp_nome'] = texto_combinado
+                    elif len(problemas_selecionados) > 0: # Força update se selecionou algo novo
+                         st.session_state['item_temp_nome'] = texto_combinado
             
             val_item = st.session_state.get('item_temp_nome', "")
-            item_nome = st.text_area("Descrição da NC (Editável)", value=val_item, key="input_item_nome", height=100, help="Descreva a não conformidade técnica ou ajuste os itens selecionados acima.")
+            item_nome = st.text_area("Descrição da NC (Editável)", value=val_item, key="input_item_nome", height=100, help="Descreva a não conformidade técnica.")
             
             if item_nome != val_item: st.session_state['item_temp_nome'] = item_nome
 
